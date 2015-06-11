@@ -1,0 +1,31 @@
+PROJECT(vtkMultiIO)
+
+cmake_minimum_required(VERSION 2.8)
+
+FIND_PACKAGE(VTK)
+FIND_PACKAGE(OpenSSL)
+FIND_PACKAGE(PythonInterp)
+FIND_PACKAGE(PythonLibs)
+FIND_PACKAGE(Git)
+
+INCLUDE(${VTK_DIR}/UseVTK.cmake)
+INCLUDE(${VTK_CMAKE_DIR}/vtkWrapPython.cmake)
+
+SUBDIRS(src)
+
+IF(NOT DEFINED DIST_DIRECTORY)
+SET(DIST_DIRECTORY "${PROJECT_SOURCE_DIR}/dist")
+MAKE_DIRECTORY(${DIST_DIRECTORY})
+ENDIF(NOT DEFINED DIST_DIRECTORY)
+
+ADD_CUSTOM_TARGET(vtkMultiIO_egg
+  ${PYTHON_EXECUTABLE} setup.py bdist_egg --exclude-source-files --dist-dir ${DIST_DIRECTORY}
+)
+
+IF(NOT TARGET packages)
+ADD_CUSTOM_TARGET(packages)
+ENDIF()
+
+ADD_DEPENDENCIES(packages vtkMultiIO_egg)
+ADD_DEPENDENCIES(vtkMultiIO_egg "${PROJECT_NAME}Python")
+
