@@ -1,75 +1,75 @@
-PROJECT(vtkMultiIO)
+cmake_minimum_required(VERSION 3.0)
 
-cmake_minimum_required(VERSION 2.8)
+# Configuration header
+set(VTKMULTIIO_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+set(VTKMULTIIO_BUILD_TESTING ${BUILD_TESTING})
 
-# Mac needs hand holding
-LINK_DIRECTORIES(/usr/local/lib)
-INCLUDE_DIRECTORIES(/usr/local/include/vtk-6.1)
+set(VTKMULTIIO_OVERRIDE " override")
+set(VTKMULTIIO_DELETE " = delete")
 
-FIND_PACKAGE(PythonInterp)
-FIND_PACKAGE(PythonLibs)
+configure_file("${VTKMULTIIO_CMAKE_DIR}/vtkMultiIOConfig.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOConfig.h" @ONLY)
 
-INCLUDE(${VTK_DIR}/UseVTK.cmake)
-INCLUDE(${VTK_DIR}/CMake/vtkWrapPython.cmake)
+configure_file("${VTKMULTIIO_CMAKE_DIR}/vtkMultiIOBuild.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOBuild.h" @ONLY)
 
-SET(srcs
+# Include directories
+include_directories(${VTKMULTIIO_INCLUDE_DIRS})
+
+# Create the main library
+set(LIB_NAME vtkMultiIO)
+
+# Sources in the current directory (library sources only!)
+set(LIB_SRCS
   vtkImageReader3.cxx
   vtkImageReader4.cxx
-  vtkMultiIOEventObject.cxx
-  vtkVFFReader.cxx
   vtkVFFWriter.cxx
 )
 
-SET(py_libs
-  vtkWrappingPython27Core-6.1
-  vtkCommonExecutionModelPython27D-6.1
-  vtkIOImagePython27D-6.1
-  vtkChartsCorePython27D-6.1
-  vtkCommonCorePython27D-6.1
-  vtkCommonExecutionModel-6.1
-  vtkChartsCore-6.1
-  vtkCommonDataModel-6.1
-  vtkCommonCore-6.1
-  vtkIOImage-6.1
-  vtksys-6.1
-  vtkIOImage-6.1
+# Headers without a matching .cxx file are listed here
+set(LIB_HDRS
+  ${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOBuild.h
+  ${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOConfig.h
+  ${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOModule.h
 )
 
-######################################################
-# You do not need to change anything beyond this point.
-######################################################
+# Internal headers (not installed)
+set(LIB_PRIVATE_HDRS
+  ${CMAKE_CURRENT_BINARY_DIR}/vtkMultiIOBuild.h
+)
 
-INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR})
-INCLUDE_DIRECTORIES(${PROJECT_BINARY_DIR})
-INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
-INCLUDE_DIRECTORIES(${PYTHON_INCLUDE_DIR})
-INCLUDE_DIRECTORIES(${VTK_SOURCE_DIR}/Wrapping/Python)
-#INCLUDE(${CMAKE_ROOT}/Modules/FindVTK.cmake) ## deprecated in cmake 3.1
+# Sources that are abstract
+set(LIB_ABSTRACT
+)
 
-IF(VTK_FOUND)
-  INCLUDE(${VTK_USE_FILE})
-  INCLUDE(${VTK_DIR}/VTKConfig.cmake)
-  INCLUDE(${VTK_CMAKE_DIR}/vtkWrapPython.cmake)
-ENDIF(VTK_FOUND)
+# Sources that are not vtkObjects
+set(LIB_SPECIAL
+  #GamepadHandler.cxx
+)
 
-OPTION(BUILD_SHARED_LIBS "Build with shared libraries."
-       ${VTK_BUILD_SHARED_LIBS})
+set_source_files_properties(${LIB_HDRS} ${LIB_SPECIAL}
+  PROPERTIES WRAP_EXCLUDE ON)
+set_source_files_properties(${LIB_ABSTRACT}
+  PROPERTIES ABSTRACT ON)
+set_source_files_properties(${LIB_PRIVATE_HDRS}
+  PROPERTIES SKIP_HEADER_INSTALL ON)
 
-IF(BUILD_SHARED_LIBS)
-  SET(VTKLOCAL_BUILD_SHARED_LIBS_CONFIG 1)
-ELSE(BUILD_SHARED_LIBS)
-  SET(VTKLOCAL_BUILD_SHARED_LIBS_CONFIG 0)
-ENDIF(BUILD_SHARED_LIBS)
+# Third party library dependencies (none)
 
-SET(VTK_USE_INSTANTIATOR_NEW 1)
 
-VTK_WRAP_PYTHON3("${PROJECT_NAME}Python" python_srcs "${srcs}")
-ADD_LIBRARY("${PROJECT_NAME}Python" MODULE ${python_srcs} ${srcs} ${PROJECT_NAME}PythonInit.cxx)
-#ADD_LIBRARY("${PROJECT_NAME}Python" MODULE ${python_srcs} ${srcs} ${instantiator_srcs})
-TARGET_LINK_LIBRARIES("${PROJECT_NAME}Python"
-                      ${py_libs}
-                      ${OPENSSL_LIBRARIES}
-                      ${libs}
-                      # ${PYTHON_LIBRARY}
-                      ) 
 
+# Create the library
+
+if(DEFINED VTK_MODULE_ENABLE_VTK_VTKMULTIIO)
+  # When building as a module for VTK 8.90 or later
+  set(LIB_SRC_HDRS)
+  foreach(_src ${LIB_SRCS})
+    get_filename_component(_base ${_src} NAME_WE)
+    list(APPEND LIB_SRC_HDRS ${_base}.h)
+  endforeach()
+  vtk_module_add_module(VTK::VTKMULTIIO
+    SOURCES ${LIB_SRCS} ${LIB_SPECIAL}
+    HEADERS ${LIB_SRC_HDRS} ${LIB_HDRS})
+  vtk_module_link(VTK::VTKMULTIIO
+    PRIVATE )
+endif()

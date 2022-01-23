@@ -1,23 +1,36 @@
+from __future__ import division
+from __future__ import print_function
+from __future__ import absolute_import
+
+from future import standard_library
+standard_library.install_aliases()
+from future.utils import python_2_unicode_compatible
+from builtins import str, ascii
+from builtins import map
+from past.utils import old_div
+from builtins import object
 import copy
-import cStringIO
-import dicom
-import dicom.dataset
+import io
+import pydicom
+import pydicom.dataset
 from enum import Enum
 import os
 import time
-import interfaces
+from . import interfaces
 import vtk
 import logging
 from vtk.util.numpy_support import vtk_to_numpy
-from zope import interface
+import numpy as np
+from zope.interface import implementer
 from PI.visualization.common.CoordinateSystem import CoordinateSystem
 from PI.dicom.convert import BaseDicomConverter
 
+logger = logging.getLogger(__name__)
+
+@implementer(interfaces.IDimension)
 class Dimension(object):
 
     """An object representing on of the dimensions of a data-type"""
-
-    interface.implements(interfaces.IDimension)
 
     def __init__(self, name, unit):
         self.SetName(name)
@@ -40,8 +53,8 @@ class Dimension(object):
 
     def __str__(self):
 
-        s = cStringIO.StringIO()
-        s.write('Dimension: "{0}" (a {1}) measured in {2}\n'.format(
+        s = io.StringIO()
+        s.write(u'Dimension: "{0}" (a {1}) measured in {2}\n'.format(
             self.GetName(), self.GetTypeName(), self.GetUnit()))
         return s.getvalue()
 
@@ -61,6 +74,24 @@ class Distance(Dimension):
     """
 
     def __init__(self, name, unit='pixels'):
+        Dimension.__init__(self, name, unit)
+
+
+class Slice(Dimension):
+
+    """
+    A dimension representing a collection of slices with no set association
+
+    Usage:
+
+    >>> d = Slice()
+    >>> d.GetName()
+    'Slice'
+    >>> d.GetUnit()
+    '#'
+    """
+
+    def __init__(self, name='slice', unit='#'):
         Dimension.__init__(self, name, unit)
 
 
@@ -100,6 +131,57 @@ class Wavelength(Dimension):
         Dimension.__init__(self, name, unit)
 
 
+class DICOMHeaderDict(dict):
+    """Emulates a standard python dictionary - build pydicom entries on a
+    slice-by-slice basis by combining a base set of tags with one or
+    more slice-specific tags.
+    """
+    def __init__(self, *args, **kwargs):
+        super(DICOMHeaderDict, self).__init__(*args, **kwargs)
+        self._metadata = None
+        self._slice_dict = {}
+
+    def set_meta_data(self, metadata):
+        self._metadata = metadata
+
+    def get_meta_data(self):
+        return self._metadata
+
+    def set_slice_dict(self, slice_dict):
+        self._slice_dict = slice_dict
+
+    def get_slice_dict(self):
+        return self._slice_dict
+
+    def __getitem__(self, ii):
+        ds = copy.deepcopy(self._metadata)
+        if ii in self._slice_dict:
+            for _tag in self._slice_dict[ii]:
+                ds[_tag.tag] = _tag
+        return ds
+
+    def __delitem__(self, ii):
+        print('not implemented!')
+
+    def __setitem__(self, ii, val):
+        print('not implemented')
+
+    def insert(self, ii, val):
+        print('not implemented')
+
+    def append(self, val):
+        print('not implemented')
+
+    @python_2_unicode_compatible
+    def __str__(self):
+        return str(self._metadata)
+
+    @python_2_unicode_compatible
+    def __repr__(self):
+        return str(self._metadata)
+
+
+@implementer(interfaces.IDimensionInformation)
 class MVImage(object):
 
     """
@@ -107,14 +189,12 @@ class MVImage(object):
     information with a VTK-style image.  Also bridges the gap between VTK4 and VTK6.
     """
 
-    interface.implements(interfaces.IDimensionInformation)
-
     def __init__(self, image_data, **kw):
 
         # for zope
         self.__component_name__ = u''
 
-        self._algorithm = None
+        self._algorithm_output = None
         self._image_data_object = image_data
         self.__reference_count = 1
         self.__x_values = None
@@ -122,6 +202,8 @@ class MVImage(object):
         self.__z_values = None
 
         self._header = {}  # header values that don't map to DICOM easily
+        self.__value_name = 'Gray Scale Value'  # what does the pixel value mean?
+        self.__unit = 'arb. units'                       # default unit
         self._dimensions = []
         self.__stencil_data = None
         self.__stencil_owner = None
@@ -137,7 +219,7 @@ class MVImage(object):
         self.parallax_base_uid = '1.2.826.0.1.3680043.9.1613'
         self._coordinate_system = CoordinateSystem.vtk_coords
         self._dicom_header = None
-        self._dicom_slice_headers = []  # slice-by-slice dicom headers (buffer)
+        self._dicom_slice_headers = DICOMHeaderDict()  # slice-by-slice dicom headers (buffer)
         self._dicom_mtime = -1
 
         # make sure image_data is correct type
@@ -168,6 +250,18 @@ class MVImage(object):
         if 'slice_headers' in kw:
             self.SetSliceDICOMHeaders(kw['slice_headers'])
 
+    def GetValueName(self):
+        return  self.__value_name
+
+    def SetValueName(self, v):
+        self.__value_name = v
+
+    def GetUnitName(self):
+        return self.__unit
+
+    def SetUnitName(self, u):
+        self.__unit = u
+
     def SetDICOMConverter(self, converter):
         self.dicom_converter = converter
 
@@ -195,102 +289,13 @@ class MVImage(object):
         """Return entire DICOM slice array"""
         return self._dicom_slice_headers
 
-    def SetSliceDICOMHeader(self, idx, ds):
-        if isinstance(ds, dicom.dataset.Dataset):
-            # save slice headers as strings
-            dcm_buffer = cStringIO.StringIO()
-            ds.save_as(dcm_buffer)
-            ds = dcm_buffer.getvalue()
-        self._dicom_slice_headers[idx] = ds
-
     def GetSliceDICOMHeader(self, idx):
-        """Return DICOM dictionary for a given slice or None if nothing exists"""
-        try:
-            dicom_header = dicom.read_file(cStringIO.StringIO(self._dicom_slice_headers[idx]))
-        except:
-            dicom_header = self._dicom_header  # return default header
-
-        return self.fix_dicom(dicom_header)
-
-    def fix_dicom(self, dicom_header):
-
-        return dicom_header
-
-        # tweak dicom info here if needed
-        # TODO: can we retire this?
-
-        # we need a valid (non-blank) patient ID
-        patient_id = dicom_header.get('PatientID', '')
-        if not patient_id:
-            logging.info("Inserting missing PatientID value")
-            if self._filename:
-                patient_id = os.path.split(self._filename)[-1]
-            else:
-                patient_id = 'MICROVIEW^USER^000'
-            dicom_header.PatientID = patient_id
-
-        # we need a patient birth date (default is 0)
-        patient_bdate = dicom_header.get('PatientBirthDate', '')
-        if not patient_bdate:
-            logging.info("Inserting missing PatientBirthDate value")
-            patient_bdate = '10010101'
-            dicom_header.PatientBirthDate = patient_bdate
-
-        # we need a patient gender (default to 'other')
-        patient_sex = dicom_header.get('PatientSex', '')
-        if not patient_sex:
-            logging.info("Inserting missing PatientSex value")
-            patient_sex = 'O'
-            dicom_header.PatientSex = patient_sex
-
-        # we need a referring physician
-        referring_physician = dicom_header.get('ReferringPhysicianName', '')
-        if not referring_physician:
-            logging.info("Inserting missing ReferringPhysicianName value")
-            referring_physician = '?'
-            dicom_header.ReferringPhysicianName = referring_physician
-
-        # add a valid (non-blank) patient Name for good measure
-        patient_name = dicom_header.get('PatientName', '')
-        if not patient_name:
-            logging.info("Inserting missing PatientName value")
-            if self._filename:
-                patient_name = os.path.split(self._filename)[-1]
-            else:
-                patient_name = 'MICROVIEW^USER'
-            dicom_header.PatientName = patient_name
-
-        # we need a valid (non-blank) study instance UID
-        study_iuid = dicom_header.get('StudyInstanceUID', '')
-        if not study_iuid:
-            # lifted from convert.py
-            t = time.time()
-            study_iuid = self.parallax_base_uid + \
-                '.' + str(int(self.station_id)) + '.' + str(t)
-            dicom_header.StudyInstanceUID = study_iuid
-            logging.info("Inserting missing StudyInstanceUID value")
-
-        study_id = dicom_header.get('StudyID', '')
-        if not study_id:
-            study_id = 'MICROVIEW^STUDY'
-            dicom_header.StudyID = study_id
-
-        # we need a valid (non-blank) series instance UID
-        series_iuid = dicom_header.get('SeriesInstanceUID', '')
-        if not series_iuid:
-            # lifted from convert.py
-            sn = '1'
-            # an 'unknown' image
-            series_iuid = study_iuid + '.' + sn + '.99'
-            dicom_header.SeriesInstanceUID = series_iuid
-            logging.info("Inserting missing SeriesInstanceUID value")
-
-        return dicom_header
+        return self._dicom_slice_headers[idx]
 
     def GetDICOMImage(self, idx):
 
         # start by grabbing dicom header (deep copy)
-        ds = copy.deepcopy(self.GetSliceDICOMHeader(idx))
+        ds = copy.deepcopy(self.GetSliceDICOMHeaders()[idx])
 
         # append image data
         arr = self.get_array()[idx]
@@ -308,7 +313,11 @@ class MVImage(object):
     def get_array(self):
 
         dims = list(self._image_data_object.GetDimensions())
-        numC = self._image_data_object.GetNumberOfScalarComponents()
+        scalars = self._image_data_object.GetPointData().GetScalars()
+        if scalars is not None:
+            numC = scalars.GetNumberOfComponents()
+        else:
+            numC = self._image_data_object.GetNumberOfScalarComponents()
 
         if numC > 1:
             dims.insert(0, numC)
@@ -325,22 +334,54 @@ class MVImage(object):
 
         return arr
 
+    def get_itk_image(self):
+        """
+        return an ITK image view of this image
+        """
+        try:
+            import itk
+        except:
+            from PI.visualization.common.PluginHelper import install_package
+            install_package("itk", pip = True)
+            logger.error("Unable to import ITK")
+            return
+
+        # get numpy representation of image data
+        arr = self.get_array()
+
+        dtype_map = {np.dtype('uint8'): itk.ctype('unsigned char'),
+                     np.dtype('int8'): itk.ctype('signed char'),
+                     np.dtype('uint16'): itk.ctype('unsigned short'),
+                     np.dtype('int16'): itk.ctype('signed short'),
+                     np.dtype('uint32'): itk.ctype('unsigned int'),
+                     np.dtype('int32'): itk.ctype('signed int'),
+                     np.dtype('float32'): itk.ctype('float'),
+                     np.dtype('float64'): itk.ctype('double')}
+
+        PixelType = dtype_map[arr.dtype]
+        Dimensions = len(arr.shape)
+        ImageType = itk.Image[PixelType, Dimensions]
+
+        itk_image = itk.PyBuffer[ImageType].GetImageViewFromArray(arr)
+        return itk_image
+
     def ScalarsModified(self):
         self.GetPointData().GetScalars().Modified()
         self.__histogram_stats.Modified()
 
-    def SetInputConnection(self, algorithm):
-        self._algorithm = algorithm
-        self.SetInputData(algorithm.GetProducer().GetOutputDataObject(0))
+    def SetInputConnection(self, algorithm_output):
+        self._algorithm_output = algorithm_output
+        self.SetInputData(algorithm_output.GetProducer().GetOutputDataObject(0))
 
     def GetOutputPort(self):
-        return self._algorithm
+        return self._algorithm_output
 
     def SetInputData(self, data_object):
 
-        if self._algorithm is None:
-            self._algorithm = vtk.vtkTrivialProducer()
-            self._algorithm.SetOutput(data_object)
+        if self._algorithm_output is None:
+            algorithm = vtk.vtkTrivialProducer()
+            algorithm.SetOutput(data_object)
+            self._algorithm_output = algorithm.GetOutputPort()
 
         self._image_data_object = data_object
 
@@ -349,7 +390,7 @@ class MVImage(object):
 
         # VTK-6
         if vtk.vtkVersion().GetVTKMajorVersion() > 5:
-            self.__histogram_stats.SetInputConnection(self._algorithm)
+            self.__histogram_stats.SetInputConnection(self._algorithm_output)
         else:
             self.__histogram_stats.SetInput(self._image_data_object)
 
@@ -413,15 +454,30 @@ class MVImage(object):
         _min, _max = h.GetAutoRange()
         ds = self.GetDICOMHeader()
         ds.WindowWidth = '%0.1f' % (_max - _min)
-        ds.WindowCenter = '%0.1f' % ((_max + _min) / 2.0)
+        ds.WindowCenter = '%0.1f' % (old_div((_max + _min), 2.0))
 
-    def SetHistogramStencil(self, stencil_data):
+    def SetHistogramStencilData(self, stencil_data):
+
+        image = self._image_data_object
+
+        # make sure stencil extents match image - generate a temporary stencil
+        # if the extents don't match
+        if stencil_data:
+            if image.GetExtent() != stencil_data.GetExtent():
+                new_stencil_data = vtk.vtkImageStencilData()
+                new_stencil_data.SetExtent(image.GetExtent())
+                new_stencil_data.AllocateExtents()
+                new_stencil_data.Add(stencil_data)
+                stencil_data = new_stencil_data
 
         # VTK-6
         if vtk.vtkVersion().GetVTKMajorVersion() > 5:
             self.__histogram_stats.SetStencilData(stencil_data)
         else:
             self.__histogram_stats.SetStencil(stencil_data)
+
+    def GetHistogramStencilData(self):
+        return self.__histogram_stats.GetStencil()
 
     def GetFilename(self):
         return self._filename
@@ -443,8 +499,9 @@ class MVImage(object):
             self.GetDICOMHeader()
 
         # Copy DICOM tags
-        for tag in input_image._dicom_header:
-            self._dicom_header[tag.tag] = tag
+        if input_image._dicom_header is not None:
+            for tag in input_image._dicom_header:
+                self._dicom_header[tag.tag] = tag
 
         # Copy non-DICOM keyword/value pairs
         header = input_image.GetHeader()
@@ -452,11 +509,10 @@ class MVImage(object):
             self._header[key] = header[key]
 
     def __str__(self):
-
-        s = cStringIO.StringIO()
+        s = io.StringIO()
         s.write(str(self._image_data_object))
-        s.write('\nFilename: {0}\n'.format(self._filename))
-        s.write('\nDICOM Header:\n')
+        s.write(str('\nFilename: {0}\n'.format(self._filename)))
+        s.write(str('\nDICOM Header:\n'))
         self.UpdateDICOMHeader()
         s.write(str(self._dicom_header))
         return s.getvalue()
@@ -493,8 +549,8 @@ class MVImage(object):
         if ds.get('Manufacturer','') == '':
             # add some MicroView-specific tags
             ds.Manufacturer = 'Parallax Innovations'
-            ds.file_meta.ImplementationClassUID += '.2.5.0'
-            ds.file_meta.ImplementationVersionName = '2.5.0'
+            ds.file_meta.ImplementationClassUID += '.2.6.0'
+            ds.file_meta.ImplementationVersionName = '2.6.0'
 
         return ds
 
@@ -502,20 +558,32 @@ class MVImage(object):
         """Update the underlying vtkImageData object
 
         This exists to smooth over the backward-incompatible changes between VTK5 and VTK6"""
-        logging.warning("We shouldn't call Update() on a MVImage object!")
+        logger.warning("We shouldn't call Update() on a MVImage object!")
+
+        # if we're running interactively, hit a breakpoint here to help track down bad Update() calls
+        import sys
+        if not hasattr(sys, 'frozen'):
+            import pdb; pdb.set_trace()
 
         if self.GetRealImage().GetExtent()[1] == -1:
-            # force an update
-            self._algorithm.GetProducer().Update()
+            # force an update (no longer works with VTK 6.2)
+            self._algorithm_output.GetProducer().Update()
 
     def UpdateInformation(self):
-        self._algorithm.GetProducer().UpdateInformation()
+        # likely no longer works with VTK 6.2
+        self._algorithm_output.GetProducer().UpdateInformation()
 
     def UpdateDICOMHeader(self):
         """Update DICOM header based on current image contents"""
 
+        init_required = False
+
         if self._dicom_header is None:
+            init_required = True
             self._dicom_header = self.ClearDICOMHeader()
+            # the default patient orientation will work using VTK-style view of world
+            # and is appropriate for an image of e.g. a prone animal
+            self._dicom_header.ImageOrientationPatient = [-1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 
         mt = self._image_data_object.GetMTime()
         if self._dicom_mtime >= mt:
@@ -527,7 +595,6 @@ class MVImage(object):
 
         # TODO: port to VTK6
         # self._source.UpdateInformation()
-
         extent = self.GetExtent()
         spacing = self.GetSpacing()
         _min, _max = self.GetScalarRange()
@@ -538,14 +605,26 @@ class MVImage(object):
         ds.BitsStored = ds.BitsAllocated
 
         ds.HighBit = ds.BitsStored - 1
-        ds.PixelSpacing = ds.NominalScannedPixelSpacing = map(
-            str, spacing[0:2])
-        ds.PixelRepresentation = 1
-        ds.SliceThickness = str(spacing[2])
-        ds.ImageOrientationPatient = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+        # 2016-07-20
+        # This next line was disabled for RT-IMAGE modalities -- perhaps it
+        # shouldn't be there at all
+        #if ds.Modality != 'RTIMAGE':
+        #    ds.PixelSpacing = ds.NominalScannedPixelSpacing = map(
+        #        str, spacing[0:2])
+
+        _type = self.GetScalarType()
+        if _type in (vtk.VTK_UNSIGNED_CHAR, vtk.VTK_UNSIGNED_SHORT, vtk.VTK_UNSIGNED_INT, vtk.VTK_UNSIGNED_LONG):
+            ds.PixelRepresentation = 0
+        else:
+            ds.PixelRepresentation = 1
+
+        ##ds.SliceThickness = ascii(spacing[2])
 
         ds.Columns = extent[1] + 1
         ds.Rows = extent[3] + 1
+
+        #ds.SpacingBetweenSlices = spacing[2]  # is this okay for all modalities?
 
         # is image data loaded from disk?
         if not((extent[1] == -1) and (extent[3] == -1)):
@@ -562,22 +641,65 @@ class MVImage(object):
                 ds[0x0028, 0x0109].VR = vr_type
                 # only specify window center and width if it isn't already
                 # present - default to 99% of data
-                if 'WindowCenter' not in ds:
-                    self.SetHistogramStencil(None)
+                # window center and width apply _after_ rescale slope/intercept
+                # are applied
+                if 'WindowCenter' not in ds and 'RescaleSlope' in ds and 'RescaleIntercept' in ds:
+                    _min = _min * float(ds.RescaleSlope) + float(ds.RescaleIntercept)
+                    _max = _max * float(ds.RescaleSlope) + float(ds.RescaleIntercept)
+                    self.SetHistogramStencilData(None)
                     stats = self.GetHistogramStatistics()
                     stats.SetAutoRangePercentiles(1, 99)
                     stats.Update()
                     _min, _max = stats.GetAutoRange()
-                    ds.WindowCenter = str(int((_min + _max) / 2.0))
-                    ds.WindowWidth = str(_max - _min)
+                    ds.WindowCenter = ascii(int(old_div((_min + _max), 2.0)))
+                    ds.WindowWidth = ascii(_max - _min)
 
         # remove PixelData if it exists
         if 'PixelData' in ds:
             del(ds.PixelData)
 
+        # perhaps here we should update slice-by-slice data if it doesn't already exist?
+        # re-generate slice-by-slice headers
+
+        if init_required:
+            slice_headers = self.GetSliceDICOMHeaders()
+            slice_headers.set_meta_data(None)
+            slice_headers.get_slice_dict().clear()
+            slice_dict = slice_headers.get_slice_dict()
+
+            slice_headers.set_meta_data(ds)
+
+            # adjust slice info -- this should end up being generated on-the-fly
+            for i in range(self.GetRealImage().GetDimensions()[2]):
+                slice_dict[i] = pydicom.dataset.Dataset()
+                slice_dict[i].InstanceNumber = int(ds.InstanceNumber) + i
+                _split = ds.SOPInstanceUID.split('.')
+                _base = '.'.join(_split[:-1])
+                _num = _split[-1]
+
+                # this is needed by MicroView's `default` image
+                slice_dict[i].SOPInstanceUID = _base + '.' + str(int(_num) + i)
+                #slice_dict[i].MediaStorageSOPInstanceUID = _base + '.' + str(int(_num) + i)
+
+                pos = ds.ImagePositionPatient
+                pos[2] += spacing[2] * i  # TODO: does direction cosines enter in here?
+                slice_dict[i].ImagePositionPatient = pos
+                slice_dict[i].SliceLocation = pos[2]
+                slice_dict[i].SliceNumber = i
+
+            # remove SOPInstanceUID from top-level dicom ds
+            if 'SOPInstanceUID' in ds:
+                del ds.SOPInstanceUID
+
+    def GetDirectionCosines(self):
+        cosines = self.GetDICOMHeader().get('ImageOrientationPatient', None)
+        if cosines:
+            return np.array(list(map(float, cosines[0:3]))), np.array(list(map(float, cosines[3:6])))
+        else:
+            return np.array([1,0,0], dtype='float'), np.array([0,1,0], dtype='float')
+
     def GetDICOMHeader(self):
         self.UpdateDICOMHeader()
-        #self._dicom_header = self.fix_dicom(self._dicom_header)
         return self._dicom_header
 
     def GetHeader(self):
@@ -635,7 +757,7 @@ class MVImage(object):
 
     def GetModality(self):
         """returns DICOM modality"""
-        return self._dicom_header.Modality
+        return self._dicom_header.get('Modality', '')
 
     def GetShift(self):
         return self._dicom_header.RescaleIntercept

@@ -1,7 +1,8 @@
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -46,6 +47,7 @@ include the method registerFileType.  In order to extend this class from the
 default class, call registerFileType(extension, classname).
 """
 
+from builtins import object
 import collections
 import os
 import sys
@@ -120,7 +122,7 @@ class vtkMultiPolyDataWriter(object):
         return getattr(self._writer, attr)
 
     def GetExtensions(self):
-        return self._extension_map.keys()
+        return list(self._extension_map.keys())
 
     def GetScalarsName(self):
         if (hasattr(self._writer, 'GetScalarsName')):
@@ -137,7 +139,7 @@ class vtkMultiPolyDataWriter(object):
     def GetMatchingFormatStrings(self):
 
         formats = collections.OrderedDict()
-        keys = self._extension_map.keys()
+        keys = list(self._extension_map.keys())
         keys.sort()
         for extension in keys:
             for entry in self._extension_map[extension]:

@@ -2,7 +2,6 @@
 #define __vtkImageReader3_h
 
 #include "vtkImageAlgorithm.h"
-#include "vtkMultiIOConfigure.h"
 
 #if defined(__APPLE__)
 #define COMMON_DIGEST_FOR_OPENSSL
@@ -18,7 +17,7 @@ class vtkStringArray;
 #define VTK_FILE_BYTE_ORDER_BIG_ENDIAN 0
 #define VTK_FILE_BYTE_ORDER_LITTLE_ENDIAN 1
 
-class VTK_vtkMultiIO_EXPORT vtkImageReader3 : public vtkImageAlgorithm
+class VTK_EXPORT vtkImageReader3 : public vtkImageAlgorithm
 {
 public:
   static vtkImageReader3 *New();
@@ -78,7 +77,7 @@ public:
     {this->SetDataScalarType(VTK_UNSIGNED_CHAR);}
 
   void GetScalarRange(float range[2]);
-   
+
   // Description:
   // Get the file format.  Pixels are this type in the file.
   vtkGetMacro(DataScalarType, int);
@@ -238,7 +237,13 @@ protected:
                                  vtkInformationVector** inputVector,
                                  vtkInformationVector* outputVector);
   virtual void ExecuteInformation();
+
+#if VTK_MAJOR_VERSION == 5
+    virtual void ExecuteData(vtkDataObject *data);
+#else
   virtual void ExecuteDataWithInformation(vtkDataObject *data, vtkInformation *outInfo);
+#endif
+
   virtual void ComputeDataIncrements();
 private:
   vtkImageReader3(const vtkImageReader3&);  // Not implemented.

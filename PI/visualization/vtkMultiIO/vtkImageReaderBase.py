@@ -1,8 +1,12 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import range
+from builtins import object
 import os
 import vtk
-from zope import interface
-import interfaces
-import MVImage
+from zope.interface import implementer
+from . import interfaces
+from . import MVImage
 from datetime import datetime
 from PI.visualization.common.CoordinateSystem import CoordinateSystem
 from PI.dicom import convert
@@ -18,11 +22,10 @@ WHOLE_FILENAME = 1 << 6
 
 ##########################################################################
 
-
+@implementer((interfaces.IImageInformation,
+              interfaces.IvtkImageReader))
 class vtkImageReaderBase(object):
 
-    interface.implements((interfaces.IImageInformation,
-                          interfaces.IvtkImageReader))
 
     __extensions__ = {'.img': 'Generic image', '.hdr': 'Generic image'}
     __magic__ = [('', 0)]
@@ -36,10 +39,10 @@ class vtkImageReaderBase(object):
         self.dicom_converter = convert.BaseDicomConverter()
 
         # contains slice-by-slice dicom tags for each slice in image
-        self._dicom_slice_headers = []
+        self._dicom_slice_headers = {}
 
     def __del__(self):
-        print 'deleting {0}'.format(self.__class__)
+        print('deleting {0}'.format(self.__class__))
 
     def SetCoordinateSystem(self, val):
         self._coordinate_system = val
@@ -89,7 +92,7 @@ class vtkImageReaderBase(object):
 
         # sanity check
         if not os.path.exists(filename):
-            return False
+            return 0
 
         valid = True
 

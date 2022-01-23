@@ -1,7 +1,11 @@
+from __future__ import print_function
+from __future__ import absolute_import
+
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -52,8 +56,9 @@ Use vtkMultiImageReader() as you would vtkDataSetReader().  Notable differences
 include the method registerFileType.  In order to extend this class from the
 default class, call registerFileType(extension, classname).
 """
-
-import dicom
+from builtins import str
+from builtins import object
+import pydicom
 import os
 import gc
 import sys
@@ -61,12 +66,16 @@ import vtk
 import logging
 import collections
 from zope import event
-import vtkImageReaderBase
-import _vtkMultiIO
-import HeaderDictionary
+from . import vtkImageReaderBase
+from . import _vtkMultiIO
+from . import HeaderDictionary
+from . import exceptions
+from .utils import GetVTKCompatibleFilename
 from PI.dicom import convert
 
 ############################################################
+
+logger = logging.getLogger(__name__)
 
 
 class MyVTKDataSetReader(vtkImageReaderBase.vtkImageReaderBase):
@@ -79,16 +88,19 @@ class MyVTKDataSetReader(vtkImageReaderBase.vtkImageReaderBase):
         self.SetImageReader(vtk.vtkDataSetReader())
 
     def CanReadFile(self, filename, magic=None):
-
         if not os.path.exists(filename):
             return 0
 
-        try:
-            self._ImageReader.SetFileName(filename)
-            if self._ImageReader.IsFileStructuredPoints():
-                return 1
-        except:
-            return 0
+        self._ImageReader.SetFileName(filename)
+        if self._ImageReader.IsFileStructuredPoints():
+            return 1
+        if self._ImageReader.IsFilePolyData() or \
+                self._ImageReader.IsFileStructuredGrid() or \
+                self._ImageReader.IsFileUnstructuredGrid():
+            # The user has mistakenly tried to load a VTK file that doesn't contain an image
+            raise exceptions.VTKNoImageError
+
+        return 0
 
 
 class MyXMLImageDataReader(vtkImageReaderBase.vtkImageReaderBase):
@@ -106,10 +118,14 @@ class MyXMLImageDataReader(vtkImageReaderBase.vtkImageReaderBase):
             return 0
 
         try:
-            return self._ImageReader.CanReadFile(filename)
+            val = self._ImageReader.CanReadFile(filename)
+            if val is None:
+                val = 0
+            return val
         except:
             return 0
 
+        return 0
 
 ############################################################
 
@@ -123,6 +139,21 @@ class MyMetaImageReader(vtkImageReaderBase.vtkImageReaderBase):
         vtkImageReaderBase.vtkImageReaderBase.__init__(self)
         self.SetImageReader(vtk.vtkMetaImageReader())
         self._converter = convert.VFFToDicomConverter()
+
+    def CanReadFile(self, filename, magic=None):
+
+        if not os.access(filename, os.R_OK):
+            return 0
+        try:
+            with open(filename, 'rb') as _f:
+                for i in range(30):
+                    line = _f.readline(50).decode()
+                    if line.startswith('ElementType ='):
+                        return 3
+        except:
+            return 0
+
+        return 0
 
     def SetFileName(self, filename):
 
@@ -234,7 +265,7 @@ class vtkMultiImageReader(object):
         self.registerFileTypes()
 
     def __del__(self):
-        print 'deleting {0}'.format(self.__class__)
+        print('deleting {0}'.format(self.__class__))
         self.tearDown()
 
     def tearDown(self):
@@ -306,7 +337,7 @@ class vtkMultiImageReader(object):
         if hasattr(self._reader, "GetDICOMHeader"):
             return self._reader.GetDICOMHeader()
         else:
-            logging.error("reader is missing GetDICOMHeader")
+            logger.error("reader is missing GetDICOMHeader")
             return vtkImageReaderBase.vtkImageReaderBase().GetDICOMHeader()
 
     # TODO: Check that the next two methods are needed by VTK-6 port
@@ -345,8 +376,7 @@ class vtkMultiImageReader(object):
     def SetWholeName(self, filename):
 
         # convert filename to given locale
-        if isinstance(filename, unicode):
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
         f = filename.lower()
         if (f in self._wholefilename_map):
@@ -360,7 +390,7 @@ class vtkMultiImageReader(object):
             self._header = None
 
             # If any Progress methods have been registered, attach them now
-            for k in self._method.keys():
+            for k in list(self._method.keys()):
                 for meth in self._method[k][:]:
                     self._reader.AddObserver(k, meth)
             return True
@@ -384,16 +414,16 @@ class vtkMultiImageReader(object):
     def SetExtension(self, ext, filename):
 
         # convert filename to given locale
-        if isinstance(filename, unicode):
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
         # Start by trying to perform the mapping by checking for a magic number
         classname, reader = self.SetReaderByMagicNumber(filename)
 
         if classname is not None:
             if self._reader is not None:
-                if self._reader.GetOutput():
-                    self._reader.GetOutput().ReleaseData()
+                output = self._reader.GetOutput()
+                if output is not None:
+                    output.ReleaseData()
                 self._reader = None
             self._reader_classname = classname
             self._reader = reader
@@ -402,7 +432,7 @@ class vtkMultiImageReader(object):
             return False
 
         # If any Progress methods have been registered, attach them now
-        for k in self._method.keys():
+        for k in list(self._method.keys()):
             for meth in self._method[k][:]:
                 self._reader.AddObserver(k, meth)
         return True
@@ -410,10 +440,21 @@ class vtkMultiImageReader(object):
     def SetReaderByMagicNumber(self, filename):
 
         # convert filename to given locale
-        if isinstance(filename, unicode):
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
-        keys = self._extension_map.keys()
+        if not os.path.exists(filename):
+            # abort early if file isn't present
+            return None, None
+
+        try:
+            sz = os.stat(filename).st_size
+            # abort early if file is zero bytes long
+            if sz == 0:
+                return None, None
+        except:
+            pass
+
+        keys = [v for v in self._extension_map.keys()]
         keys.sort()
 
         # examine most likely classes first
@@ -440,9 +481,21 @@ class vtkMultiImageReader(object):
                 if hasattr(classname, 'CanReadFile'):
 
                     reader = classname()
-                    if reader.CanReadFile(filename) > 0:
-                        self._usemm = usemm
-                        return (classname, reader)
+                    try:
+                        try:
+                            if reader.CanReadFile(filename) > 0:
+                                self._usemm = usemm
+                                return (classname, reader)
+                        except (UnicodeDecodeError, TypeError) as e:
+                            if reader.CanReadFile(filename.encode(sys.getfilesystemencoding() or 'UTF-8')) > 0:
+                                self._usemm = usemm
+                                return (classname, reader)
+                    except exceptions.VTKNoImageError as e:
+                        # pass this exception along
+                        raise e
+                    except Exception as e:
+                        # an exception occurred in the `CanReadFile` method
+                        logger.exception(e)
                 else:
                     # rely on code in vtkImageReaderBase
                     if vtkImageReaderBase.vtkImageReaderBase().CanReadFile(filename, magic=magic) > 0:
@@ -454,11 +507,10 @@ class vtkMultiImageReader(object):
     def SetFilePattern(self, pat):
 
         # convert filename to given locale
-        if isinstance(pat, unicode):
-            pat = pat.encode(sys.getfilesystemencoding() or 'UTF-8')
+        pat = GetVTKCompatibleFilename(pat)
 
         if (self._reader == None):
-            logging.error("Set extension first")
+            logger.error("Set extension first")
             return
 
         # And call it's SetFilePattern() method
@@ -467,11 +519,10 @@ class vtkMultiImageReader(object):
     def SetFilePrefix(self, prefix):
 
         # convert filename to given locale
-        if isinstance(prefix, unicode):
-            prefix = prefix.encode(sys.getfilesystemencoding() or 'UTF-8')
+        prefix = GetVTKCompatibleFilename(prefix)
 
         if (self._reader == None):
-            logging.error("Set extension first")
+            logger.error("Set extension first")
             return
 
         # And call it's SetFilePrefix() method
@@ -486,16 +537,16 @@ class vtkMultiImageReader(object):
         filename = filename_array.GetValue(0)
 
         # convert filename to given locale
-        if isinstance(filename, unicode):
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
         # adjust reader so it understands the first file slice
-        extension = os.path.basename(filename).lower().split('.')[-1]
+        extension = os.path.splitext(
+            os.path.basename(filename).lower())[-1][1:]
         ret = self.SetExtension(extension, filename)
 
         # And call it's SetFileNames() method
         if not ret:
-            logging.error("Unable to load images")
+            logger.error("Unable to load images")
             return ret
         else:
             ret = self._reader.SetFileNames(filename_array, **kw)
@@ -507,9 +558,7 @@ class vtkMultiImageReader(object):
 
         self._header = None
 
-        # convert filename to given locale
-        if isinstance(filename, unicode):
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
         temp = os.path.basename(filename).lower()
 
@@ -518,14 +567,32 @@ class vtkMultiImageReader(object):
 
         # if this fails, map by the file's extension
         if not ret:
-            extension = temp.split('.')[-1]
+            extension = os.path.splitext(temp)[-1][1:]
             ret = self.SetExtension(extension, filename)
 
         # And call it's SetFileName() method
         if not ret:
-            logging.error("Unable to load %s" % filename)
+            sz = 0
+            header = ''
+            if os.path.exists(filename):
+                sz = os.stat(filename).st_size
+                try:
+                    with open(filename, 'rb') as _f:
+                        header = _f.read(64)
+                except:
+                    pass
+            logger.error("Unable to load %s" % filename, extra={
+                'filesize': sz,
+                'header': header,
+            })
             return ret
         else:
+
+            # older versions of VTK don't support unicode
+            if isinstance(filename, str) and vtk.vtkVersion().GetVTKMajorVersion() < 6:
+                filename = filename.encode(
+                    sys.getfilesystemencoding() or 'UTF-8')
+
             ret = self._reader.SetFileName(filename, **kw)
             if ret is None:
                 ret = True
@@ -556,13 +623,39 @@ class vtkMultiImageReader(object):
         return str(self._extension_map)
 
     def GetExtensions(self):
-        return self._extension_map.keys()
+        return list(self._extension_map.keys())
+
+    def GetDataExtent(self):
+        try:
+            ret = self._reader.GetDataExtent()
+        except:
+            logger.warning("Reader does not implement GetDataExtent()!")
+            ret = self._reader.GetOutput().GetExtent()
+        return ret
 
     def GetDataSpacing(self):
         try:
             ret = self._reader.GetDataSpacing()
         except:
+            logger.warning("Reader does not implement GetDataSpacing()!")
             ret = self._reader.GetOutput().GetSpacing()
+        return ret
+
+    def GetNumberOfScalarComponents(self):
+        try:
+            ret = self._reader.GetNumberOfScalarComponents()
+        except:
+            logger.warning(
+                "Reader does not implement GetNumberOfScalarComponents()!")
+            ret = self._reader.GetOutput().GetNumberOfScalarComponents()
+        return ret
+
+    def GetDataScalarType(self):
+        try:
+            ret = self._reader.GetDataScalarType()
+        except:
+            logger.warning("Reader does not implement GetDataScalarType()!")
+            ret = self._reader.GetOutput().GetScalarType()
         return ret
 
     def AddObserver(self, event, method):
@@ -574,7 +667,7 @@ class vtkMultiImageReader(object):
 
     def GetMatchingFormatStrings(self, capabilities=0):
         formats = collections.OrderedDict()
-        keys = self._extension_map.keys()
+        keys = list(self._extension_map.keys())
         keys.sort()
         for extension in keys:
             for entry in self._extension_map[extension]:

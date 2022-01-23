@@ -1,7 +1,8 @@
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -41,17 +42,22 @@
 """
 Loads as many different writers as is possible.
 """
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import range
 import os
 import logging
 import vtk
 
-import vtkImageWriterBase
-import vtkMultiImageWriter
-import vtkMultiPolyDataWriter
+from . import vtkImageWriterBase
+from . import vtkMultiImageWriter
+from . import vtkMultiPolyDataWriter
 from PI.visualization.common import PluginHelper
-from PI.egg.pkg_resources import iter_entry_points, working_set, Environment
+from pkg_resources import iter_entry_points, working_set, Environment
 
 _plugin_cache = None
+
+logger = logging.getLogger(__name__)
 
 
 def LoadImageWriters(writer=None, directories=['.'], cache=True):
@@ -78,7 +84,7 @@ def LoadImageWriters(writer=None, directories=['.'], cache=True):
                 writer.registerFileType(
                     _class.__extensions__, _class, _class.__capabilities__)
         except:
-            logging.exception("vtkLoadWriters")
+            logger.exception("vtkLoadWriters")
 
     return writer, writer.GetMatchingFormatStrings()
 
@@ -125,14 +131,15 @@ def GetImageWriterByClassName(classname, directories=['.']):
         working_set.add(dist)
 
     for module in iter_entry_points(group='PI.vtk.ImageWriter'):
-        print 'examining:', module.module_name
+        print('examining:', module.module_name)
         if module.module_name.endswith(classname):
             # Load module
             _class = module.load()
             return _class()
 
-    logging.error(
+    logger.error(
         "Unable to find plugin that contains a %s writer!!" % classname)
+
 
 if __name__ == '__main__':
     LoadImageWriters()

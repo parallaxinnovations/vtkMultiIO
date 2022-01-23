@@ -1,0 +1,9 @@
+#ifndef vtkMultiIOBuild_h
+#define vtkMultiIOBuild_h
+
+/* Source and Build version info. */
+#define VTKMULTIIO_BUILD_DATE "@VTKMULTIIO_BUILD_DATE@"
+#define VTKMULTIIO_BUILD_TIME "@VTKMULTIIO_BUILD_TIME@"
+#define VTKMULTIIO_SOURCE_VERSION "@VTKMULTIIO_SOURCE_VERSION@"
+
+#endif

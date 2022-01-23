@@ -1,0 +1,23 @@
+#ifndef vtkMultiIOConfig_h
+#define vtkMultiIOConfig_h
+
+/* Configuration information. */
+#cmakedefine VTKMULTIIO_BUILD_SHARED_LIBS
+#cmakedefine VTKMULTIIO_BUILD_TESTING
+
+/* Version number. */
+#define VTKMULTIIO_MAJOR_VERSION @VTKMULTIIO_MAJOR_VERSION@
+#define VTKMULTIIO_MINOR_VERSION @VTKMULTIIO_MINOR_VERSION@
+#define VTKMULTIIO_PATCH_VERSION @VTKMULTIIO_PATCH_VERSION@
+#define VTKMULTIIO_SHORT_VERSION "@VTKMULTIIO_SHORT_VERSION@"
+#define VTKMULTIIO_VERSION "@VTKMULTIIO_VERSION@"
+
+/* Legacy (for backwards compatibility) */
+#define VTKMULTIIO_BUILD_VERSION VTKMULTIIO_PATCH_VERSION
+
+/* To support 'override' for C++11 compilers */
+#define VTK_VTKMULTIIO_OVERRIDE@VTKMULTIIO_OVERRIDE@
+/* To support '=delete' for C++11 compilers */
+#define VTK_VTKMULTIIO_DELETE@VTKMULTIIO_DELETE@
+
+#endif

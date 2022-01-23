@@ -14,10 +14,10 @@
 =========================================================================*/
 // .NAME vtkImageReader4 - Superclass of binary file readers.
 // .SECTION Description
-// vtkImageReader4 is the parent class for vtkImageReader.  It 
+// vtkImageReader4 is the parent class for vtkImageReader.  It
 // is a good super class for streaming readers that do not require
 // a mask or transform on the data.  vtkImageReader was implemented
-// before vtkImageReader4, vtkImageReader4 is intended to have 
+// before vtkImageReader4, vtkImageReader4 is intended to have
 // a simpler interface.
 
 // .SECTION See Also
@@ -27,7 +27,7 @@
 #define __vtkImageReader4_h
 
 #include "vtkImageAlgorithm.h"
-#include "vtkMultiIOConfigure.h"
+#include "vtksys/FStream.hxx"
 
 //#define _REQUIRE_CHECKSUMS_
 #ifdef _REQUIRE_CHECKSUMS_
@@ -39,12 +39,13 @@ class vtkStringArray;
 #define VTK_FILE_BYTE_ORDER_BIG_ENDIAN 0
 #define VTK_FILE_BYTE_ORDER_LITTLE_ENDIAN 1
 
-class VTK_vtkMultiIO_EXPORT vtkImageReader4 : public vtkImageAlgorithm
+class VTK_EXPORT vtkImageReader4 : public vtkImageAlgorithm
 {
 public:
   static vtkImageReader4 *New();
-  vtkTypeRevisionMacro(vtkImageReader4,vtkImageAlgorithm);
-  void PrintSelf(ostream& os, vtkIndent indent);   
+  vtkTypeMacro(vtkImageReader4,vtkImageAlgorithm);
+
+  void PrintSelf(ostream& os, vtkIndent indent);
 
   // Description:
   // Specify file name for the image file. If the data is stored in
@@ -80,7 +81,7 @@ public:
   vtkGetStringMacro(FilePattern);
 
   // Description:
-  // Set the data type of pixels in the file.  
+  // Set the data type of pixels in the file.
   // If you want the output scalar type to have a different value, set it
   // after this method is called.
   virtual void SetDataScalarType(int type);
@@ -176,7 +177,7 @@ public:
   vtkBooleanMacro(SwapBytes,int);
 
 //BTX
-  ifstream *GetFile() {return this->File;}
+  vtksys::ifstream *GetFile() {return this->File;}
   vtkGetVectorMacro(DataIncrements,unsigned long,4);
 //ETX
 
@@ -237,7 +238,7 @@ protected:
   int NumberOfScalarComponents;
   int FileLowerLeft;
 
-  ifstream *File;
+  vtksys::ifstream *File;
   unsigned long DataIncrements[4];
   int DataExtent[6];
   int SwapBytes;
@@ -257,7 +258,12 @@ protected:
                                  vtkInformationVector** inputVector,
                                  vtkInformationVector* outputVector);
   virtual void ExecuteInformation();
+
+#if VTK_MAJOR_VERSION == 5
+  virtual void ExecuteData(vtkDataObject *data);
+#else
   virtual void ExecuteDataWithInformation(vtkDataObject *data, vtkInformation *outInfo);
+#endif
   virtual void ComputeDataIncrements();
 private:
   vtkImageReader4(const vtkImageReader4&);  // Not implemented.

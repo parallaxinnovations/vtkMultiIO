@@ -1,7 +1,8 @@
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -46,11 +47,14 @@ include the method registerFileType.  In order to extend this class from the
 default class, call registerFileType(extension, classname).
 """
 
+from builtins import object
 import collections
 import os
 import sys
 import vtk
 import logging
+
+logger = logging.getLogger(__name__)
 
 
 class vtkMultiPolyDataReader(object):
@@ -72,42 +76,43 @@ class vtkMultiPolyDataReader(object):
         try:
             self.registerFileType({'.vtk': 'VTK'}, vtk.vtkDataSetReader)
         except:
-            logging.error("Unable to find vtkDataSetReader")
+            logger.error("Unable to find vtkDataSetReader")
         try:
             self.registerFileType({'.obj': 'Wavefront OBJ'}, vtk.vtkOBJReader)
         except:
-            logging.error("Unable to find vtkOBJReader")
+            logger.error("Unable to find vtkOBJReader")
         try:
             self.registerFileType(
                 {'.stl': 'Stereo Lithography'}, vtk.vtkSTLReader)
         except:
-            logging.error("Unable to find vtkSTLReader")
-        try:
-            self.registerFileType({'.bin': 'PLOT3D'}, vtk.vtkPLOT3DReader)
-        except:
-            logging.error("Unable to find vtkPLOT3DReader")
+            logger.error("Unable to find vtkSTLReader")
+        if vtk.vtkVersion().GetVTKMajorVersion() == 5:
+            try:
+                self.registerFileType({'.bin': 'PLOT3D'}, vtk.vtkPLOT3DReader)
+            except:
+                logger.error("Unable to find vtkPLOT3DReader")
         try:
             self.registerFileType({'.ply': 'PLY'}, vtk.vtkPLYReader)
         except:
-            logging.error("Unable to find vtkPLYReader")
+            logger.error("Unable to find vtkPLYReader")
         try:
             self.registerFileType(
                 {'.vtp': 'VTK XML'}, vtk.vtkXMLPolyDataReader)
         except:
-            logging.error("Unable to find vtkXMLPolyDataReader")
+            logger.error("Unable to find vtkXMLPolyDataReader")
         try:
             self.registerFileType({'.g': 'BYU'}, vtk.vtkBYUReader)
         except:
-            logging.error("Unable to find vtkBYUReader")
+            logger.error("Unable to find vtkBYUReader")
         try:
             self.registerFileType(
                 {'.vrt': 'proSTAR', '.cel': 'proSTAR'}, vtk.vtkProStarReader)
         except:
-            logging.error("Unable to find vtkProStarReader")
+            logger.error("Unable to find vtkProStarReader")
         try:
             self.registerFileType({'.pdb': 'PDB'}, vtk.vtkPDBReader)
         except:
-            logging.error("Unable to find vtkPDBReader")
+            logger.error("Unable to find vtkPDBReader")
 
     def registerFileType(self, extensions, classname):
         """
@@ -116,7 +121,7 @@ class vtkMultiPolyDataReader(object):
 
         # keep track of all reader classes
         self._all_readers.append(classname)
-        
+
         # iterate over all extensions
         for e in extensions:
             e_lower = e.lower()
@@ -177,11 +182,11 @@ class vtkMultiPolyDataReader(object):
         return self._reader.GetOutput()
 
     def GetExtensions(self):
-        return self._extension_map.keys()
+        return list(self._extension_map.keys())
 
     def GetMatchingFormatStrings(self):
         formats = collections.OrderedDict()
-        keys = self._extension_map.keys()
+        keys = list(self._extension_map.keys())
         keys.sort()
         for extension in keys:
             for entry in self._extension_map[extension]:

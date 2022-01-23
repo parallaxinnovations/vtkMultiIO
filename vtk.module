@@ -1,0 +1,13 @@
+NAME
+  VTK::vtkMultiIO
+LIBRARY_NAME
+  vtkMultiIO
+GROUPS
+  StandAlone
+DEPENDS
+  VTK::CommonCore
+  VTK::IOImage
+  VTK::ImagingCore
+PRIVATE_DEPENDS
+TEST_DEPENDS
+  VTK::TestingCore

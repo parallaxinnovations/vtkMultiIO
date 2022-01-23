@@ -1,7 +1,8 @@
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -45,17 +46,22 @@ Use vtkMultiImageWriter() as you would vtkDataSetWriter().  Notable differences
 include the method registerFileType.  In order to extend this class from the
 default class, call registerFileType(extension, classname).
 """
+from __future__ import absolute_import
 
+from builtins import str
+from builtins import object
 import collections
 import os
 import logging
 import sys
 import vtk
-import vtkImageWriterBase
-import _vtkMultiIO
-
+from . import vtkImageWriterBase
+from . import _vtkMultiIO
+from .utils import GetVTKCompatibleFilename
 from PI.visualization.vtkMultiIO import MVImage
 from PI.visualization.vtkMultiIO import vtkImageWriterBase
+
+logger = logging.getLogger(__name__)
 
 
 class MyVTKDataSetWriter(vtkImageWriterBase.vtkImageWriterBase):
@@ -196,8 +202,8 @@ class MyVFFWriter(vtkImageWriterBase.vtkImageWriterBase):
         for key in header:
             try:
                 self.SetKeyword(key, header[key])
-            except Exception, e:
-                logging.error("Unable to convert tag {0}".format(name))
+            except Exception as e:
+                logger.error("Unable to convert tag {0}".format(name))
 
 ############################################################
 
@@ -219,6 +225,10 @@ class vtkMultiImageWriter(object):
         self.registerFileTypes()
 
     def SetInput(self, image):
+        logger.warning("Don't call vtkMultiImageWriter::SetInput")
+        return self.SetInputData(image)
+
+    def SetInputData(self, image):
 
         if image:
             if isinstance(image, MVImage.MVImage):
@@ -238,7 +248,7 @@ class vtkMultiImageWriter(object):
                 cast.SetOutputScalarTypeToUnsignedShort()
                 image = cast.GetOutput()
 
-        self._writer.SetInput(image)
+        self._writer.SetInputData(image)
 
     def registerFileTypes(self):
 
@@ -251,8 +261,8 @@ class vtkMultiImageWriter(object):
                                '.ppm': 'Portable pixmap',
                                '.pbm': 'Portable bitmap'}, MyPNMImageWriter,
                               (vtkImageWriterBase.DEPTH_8 | vtkImageWriterBase.IMAGE_2D))
-        self.registerFileType({'.tiff': 'TIFF', '.tif': 'TIFF'}, MyTIFFWriter, (
-            vtkImageWriterBase.DEPTH_8 | vtkImageWriterBase.DEPTH_16 | vtkImageWriterBase.IMAGE_2D))
+        # self.registerFileType({'.tiff': 'TIFF', '.tif': 'TIFF'}, MyTIFFWriter, (
+        #    vtkImageWriterBase.DEPTH_8 | vtkImageWriterBase.DEPTH_16 | vtkImageWriterBase.DEPTH_32 | vtkImageWriterBase.IMAGE_2D))
         self.registerFileType({'.png': 'PNG'}, MyPNGWriter, (
             vtkImageWriterBase.DEPTH_8 | vtkImageWriterBase.IMAGE_2D))
         self.registerFileType({'.jpg': 'JPEG', '.jpeg': 'JPEG'}, MyJPEGWriter, (
@@ -318,7 +328,7 @@ class vtkMultiImageWriter(object):
             self._writer = self._wholefilename_map[f]()
             self._writer.SetupWriter()
             # If any Progress methods have been registered, attach them now
-            for val in self._observers.values():
+            for val in list(self._observers.values()):
                 self._writer.AddObserver(val[0], val[1])
             return True
         else:
@@ -345,14 +355,13 @@ class vtkMultiImageWriter(object):
             self._writer.SetFileTypeToBinary()
 
         # If any Progress methods have been registered, attach them now
-        for val in self._observers.values():
+        for val in list(self._observers.values()):
             self._writer.AddObserver(val[0], val[1])
         return True
 
     def SetFileName(self, filename):
 
-        if type(filename) is unicode:
-            filename = filename.encode(sys.getfilesystemencoding() or 'UTF-8')
+        filename = GetVTKCompatibleFilename(filename)
 
         temp = os.path.basename(filename).lower()
 
@@ -374,7 +383,7 @@ class vtkMultiImageWriter(object):
         return getattr(self._writer, attr)
 
     def GetExtensions(self):
-        return self._extension_map.keys()
+        return list(self._extension_map.keys())
 
     def AddObserver(self, event, method):
         self._observer_id += self._observer_id
@@ -406,7 +415,7 @@ class vtkMultiImageWriter(object):
                                 value = "'" + value + "'"
                             self.SetKeyword(name, value)
                     except:
-                        logging.exception("vtkMultiImageWriter")
+                        logger.exception("vtkMultiImageWriter")
 
     def SetHeader(self, v):
 
@@ -426,7 +435,7 @@ class vtkMultiImageWriter(object):
 
     def GetMatchingFormatStrings(self, capabilities=0):
         formats = collections.OrderedDict()
-        keys = self._extension_map.keys()
+        keys = list(self._extension_map.keys())
         keys.sort()
         for extension in keys:
             for entry in self._extension_map[extension]:

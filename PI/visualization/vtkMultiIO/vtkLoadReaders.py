@@ -1,7 +1,8 @@
 # =========================================================================
 #
-# Copyright (c) 2000-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2000-2002 Enhanced Vision Systems
+# Copyright (c) 2002-2008 GE Healthcare
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -41,26 +42,28 @@
 """
 Loads as many different readers as is possible.
 """
+from __future__ import absolute_import
 
+from builtins import range
 import os
 import logging
 import vtk
-import vtkImageReaderBase
-import vtkMultiImageReader
-import vtkMultiPolyDataReader
+from . import vtkImageReaderBase
+from . import vtkMultiImageReader
+from . import vtkMultiPolyDataReader
 from PI.visualization.common import PluginHelper
+
+logger = logging.getLogger(__name__)
+
 
 # These next packages are needed to build standalone codebase
 import xml.etree.ElementTree
-try:
-    import vtkgdcm
-except:
-    logging.warning("unable to import vtkgdcm!")
-from vtk.util import vtkImageImportFromArray
+from PI.lite.vtkImageImportFromArray import vtkImageImportFromArray
 
-from PI.egg.pkg_resources import iter_entry_points, working_set, Environment
+from pkg_resources import iter_entry_points, working_set, Environment
 
 _plugin_cache = None
+
 
 
 def LoadImageReaders(reader=None, directories=['.'], cache=True):
@@ -73,6 +76,10 @@ def LoadImageReaders(reader=None, directories=['.'], cache=True):
         directories[i] = os.path.abspath(directories[i])
 
     PluginHelper.SetupPlugins(directories, cache=cache)
+
+    # use a custom import hook to load VTK
+    #   -- the goal here is to reduce binary distribution and to speed load time
+    #      by avoiding loading modules/packages we don't actually use
 
     for module in iter_entry_points(group='PI.vtk.ImageReader', name=None):
 
@@ -89,7 +96,7 @@ def LoadImageReaders(reader=None, directories=['.'], cache=True):
                     _class.__extensions__, _class, _class.__magic__, _class.__capabilities__)
 
         except:
-            logging.exception("vtkLoadReaders")
+            logger.exception("vtkLoadReaders")
 
     return reader, reader.GetMatchingFormatStrings()
 
@@ -142,5 +149,5 @@ def GetImageReaderByClassName(classname, directories=['.']):
             _class = module.load()
             return _class()
 
-    logging.error(
+    logger.error(
         "Unable to find plugin that contains a '%s' reader!!" % classname)
