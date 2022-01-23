@@ -2,7 +2,6 @@
 #define __vtkVFFHeaderInternal_h
 
 #include <map>
-#include "vtkMultiIOConfigure.h"
 
 #include "vtkStdString.h"
 

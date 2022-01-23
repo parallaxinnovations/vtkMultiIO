@@ -42,13 +42,12 @@
 import sys
 import os
 import shutil
-from distutils.core import setup
-from distutils.command.build_ext import build_ext as _build_ext
-from distutils.core import Extension
-
+from setuptools import setup
+from setuptools.command.build_ext import build_ext as _build_ext
+from setuptools import Extension
 #
-# We need to kludge a cmake-build dynamic library into a python distutils build process.
-# This is done by hooking into distutils directly
+# We need to kludge a cmake-build dynamic library into a python build process.
+# This is done by hooking into setuptools directly
 #
 
 
@@ -57,9 +56,10 @@ class build_ext(_build_ext):
     def __init__(self, dist):
         _build_ext.__init__(self, dist)
         if sys.platform == 'win32':
-            self._extension = 'vtkMultiIOPython.pyd'
+            self._extension = 'vtkMultiIO.pyd'
         else:
-            self._extension = 'libvtkMultiIOPython.so'
+            self._extension = 'vtkMultiIO.so'
+        self._inline_build = True
 
     def find_binary(self):
         """
@@ -77,7 +77,7 @@ class build_ext(_build_ext):
         src = self.find_binary()
         dest = os.path.join(
             self.build_lib, 'PI', 'visualization', 'vtkMultiIO', self._extension)
-        print "Copying cmake-built extension into build output directory (%s => %s)" % (src, dest)
+        print("Copying cmake-built extension into build output directory (%s => %s)" % (src, dest))
         if os.path.abspath(src) != os.path.abspath(dest):
             shutil.copy(src, dest)
 
@@ -92,19 +92,14 @@ SetFileName() method.
 
 
 __init__py = """
-try:
-  __import__('pkg_resources').declare_namespace(__name__)
-except:
-  __path__ = __import__('pkgutil').extend_path(__path__, __name__)
-
 PACKAGE_VERSION = "2.5.0"
 PACKAGE_SHA1 = "NA"
 """
-print >> open(os.path.join(os.path.dirname(sys.argv[
-              0]), 'PI', 'visualization', 'vtkMultiIO', '__init__.py'), 'wt'), __init__py.strip()
+#print >> open(os.path.join(os.path.dirname(sys.argv[
+#              0]), 'PI', 'visualization', 'vtkMultiIO', '__init__.py'), 'wt'), __init__py.strip()
 
 setup(name='vtkMultiIO',
-      version="2.5.0",
+      version="2.6.0",
       description="VTK/Python Multiple format reader and writer classes",
       long_description=desc,
       author="Jeremy D. Gill",
@@ -112,9 +107,10 @@ setup(name='vtkMultiIO',
       maintainer="Jeremy D. Gill",
       maintainer_email="jgill@parallax-innovations.com",
       url="http://www.parallax-innovations.com/microview",
-      packages=['PI', 'PI.visualization', 'PI.visualization.vtkMultiIO'],
+      namespace_packages=['PI', 'PI.visualization'],
+      packages=['PI.visualization.vtkMultiIO'],
       # override some built commands
       cmdclass={'build_ext': build_ext},
-      ext_modules=[Extension('libvtkMultiIOPython', [''])],
+      ext_modules=[Extension('vtkMultiIO', [''])],
       license="MIT",
       )

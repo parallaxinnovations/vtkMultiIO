@@ -1,8 +1,12 @@
+from __future__ import absolute_import
+from builtins import str
+from builtins import object
 import vtk
 
-import dicom
-from zope import interface
-import interfaces
+import pydicom
+from zope.interface import implementer
+from PI.visualization.vtkMultiIO import interfaces
+import logging
 from PI.visualization.vtkMultiIO import MVImage
 
 # list of image Writer capabilities
@@ -13,6 +17,8 @@ DEPTH_64 = 1 << 3
 IMAGE_2D = 1 << 4
 IMAGE_3D = 1 << 5
 WHOLE_FILENAME = 1 << 6
+
+logger = logging.getLogger(__name__)
 
 
 class vtkWriterBase(object):
@@ -25,17 +31,16 @@ class vtkWriterBase(object):
         return self.__classname__
 
 
-class vtkImageWriterBase(vtkWriterBase):
-
-    interface.implements((interfaces.IDimensionInformation,
+@implementer((interfaces.IDimensionInformation,
                           interfaces.IImageInformation,
                           interfaces.IvtkImageWriter))
+class vtkImageWriterBase(vtkWriterBase):
 
     __capabilities__ = (DEPTH_16)
 
     def __init__(self):
         self._ImageWriter = None
-        self._image = None
+        self.__image = None
         self.ClearDICOMHeader()
 
     def GetDICOMHeader(self):
@@ -45,7 +50,7 @@ class vtkImageWriterBase(vtkWriterBase):
         self._ds = ds
 
     def ClearDICOMHeader(self):
-        self._ds = dicom.dataset.Dataset()
+        self._ds = pydicom.dataset.Dataset()
 
     def ConvertTags(self, ds):
 
@@ -65,15 +70,15 @@ class vtkImageWriterBase(vtkWriterBase):
                     # ignore certain tags
                     continue
                 tags['dicom_{0}'.format(name)] = value
-            except Exception, e:
-                logging.error("Unable to convert tag {0}".format(name))
+            except Exception as e:
+                logger.error("Unable to convert tag {0}".format(name))
 
         return tags
 
     def __getattr__(self, attr):
         try:
             return getattr(self._ImageWriter, attr)
-        except Exception, e:
+        except Exception as e:
             # hook left here so we can trace if needed
             raise e
 
@@ -84,17 +89,29 @@ class vtkImageWriterBase(vtkWriterBase):
     def GetFileExtensions(self):
         return []
 
-    def GetInput(self):
-        return self._image
+    def GetInputData(self):
+        return self.__image
 
-    def SetInput(self, image):
+    def GetInputConnection(self):
+        return self._algorithm_output
+
+    def SetInputConnection(self, algorithm_output):
+        self._algorithm_output = algorithm_output
+        self.SetInputData(algorithm_output.GetProducer().GetOutputDataObject(0))
+
+    def SetInputData(self, image):
+        self.__image = image
         if isinstance(image, MVImage.MVImage):
             real_image = image.GetRealImage()
-            self._image = image
+            self.__image = image
         else:
             real_image = image
-            self._image = None
-        self._ImageWriter.SetInput(real_image)
+            self.__image = None
+        # VTK-6
+        if hasattr(self._ImageWriter, 'SetInputData'):
+            self._ImageWriter.SetInputData(real_image)
+        else:
+            self._ImageWriter.SetInput(real_image)
 
     def SetImageWriter(self, writer):
 

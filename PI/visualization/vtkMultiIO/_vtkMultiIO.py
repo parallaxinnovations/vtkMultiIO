@@ -1,6 +1,1 @@
-import os
-
-if os.name == 'posix':
-    from libvtkMultiIOPython import *
-else:
-    from vtkMultiIOPython import *
+from PI.visualization.vtkMultiIO.vtkMultiIO import *

@@ -1,4 +1,7 @@
-import cStringIO
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+import io
 from PI.visualization.common.events import BaseEvent
 
 
@@ -30,12 +33,12 @@ class HeaderModifiedEvent(BaseEvent):
 
     def __str__(self):
 
-        s = cStringIO.StringIO()
+        s = io.StringIO()
 
-        s.write('Header Key/Value Pairs:\n')
+        s.write(u'Header Key/Value Pairs:\n')
 
         for key in self._hdr:
-            s.write('\t%s = %s\n' % (key, self._hdr[key]))
+            s.write(u'\t%s = %s\n' % (key, self._hdr[key]))
 
         return s.getvalue()
 

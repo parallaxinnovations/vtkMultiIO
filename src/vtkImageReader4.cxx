@@ -26,7 +26,7 @@
 
 #include <sys/stat.h>
 
-vtkCxxRevisionMacro(vtkImageReader4, "$Revision: 1.43 $");
+//vtkCxxRevisionMacro(vtkImageReader4, "$Revision: 1.43 $");
 vtkStandardNewMacro(vtkImageReader4);
 
 #ifdef read
@@ -47,7 +47,7 @@ vtkImageReader4::vtkImageReader4()
 
   this->DataScalarType = VTK_SHORT;
   this->NumberOfScalarComponents = 1;
-  
+
   this->DataOrigin[0] = this->DataOrigin[1] = this->DataOrigin[2] = 0.0;
 
   this->DataSpacing[0] = this->DataSpacing[1] = this->DataSpacing[2] = 1.0;
@@ -62,10 +62,10 @@ vtkImageReader4::vtkImageReader4()
 
   this->FileName = NULL;
   this->InternalFileName = NULL;
-  
+
   this->HeaderSize = 0;
   this->ManualHeaderSize = 0;
-  
+
   this->FileNameSliceOffset = 0;
   this->FileNameSliceSpacing = 1;
 
@@ -123,7 +123,7 @@ vtkImageReader4::~vtkImageReader4()
 }
 
 //----------------------------------------------------------------------------
-// This function sets the name of the file. 
+// This function sets the name of the file.
 void vtkImageReader4::ComputeInternalFileName(int slice)
 {
   // delete any old filename
@@ -144,12 +144,12 @@ void vtkImageReader4::ComputeInternalFileName(int slice)
     {
     const char *filename = this->FileNames->GetValue(slice);
     this->InternalFileName = new char [strlen(filename) + 10];
-    sprintf(this->InternalFileName,"%s",filename);
+    snprintf(this->InternalFileName, strlen(filename) + 10, "%s",filename);
     }
   else if (this->FileName)
     {
     this->InternalFileName = new char [strlen(this->FileName) + 10];
-    sprintf(this->InternalFileName,"%s",this->FileName);
+    snprintf(this->InternalFileName, strlen(this->FileName) + 10, "%s",this->FileName);
     }
   else
     {
@@ -160,7 +160,7 @@ void vtkImageReader4::ComputeInternalFileName(int slice)
       {
       this->InternalFileName = new char [strlen(this->FilePrefix) +
                                         strlen(this->FilePattern) + 10];
-      sprintf (this->InternalFileName, this->FilePattern,
+      snprintf (this->InternalFileName, strlen(this->FilePrefix) + strlen(this->FilePattern) + 10, this->FilePattern,
                this->FilePrefix, slicenum);
       }
     else if (this->FilePattern)
@@ -178,11 +178,11 @@ void vtkImageReader4::ComputeInternalFileName(int slice)
         }
       if(hasPercentS)
         {
-        sprintf (this->InternalFileName, this->FilePattern, "", slicenum);
+        snprintf (this->InternalFileName, strlen(this->FilePattern) + 10, this->FilePattern, "", slicenum);
         }
       else
         {
-        sprintf (this->InternalFileName, this->FilePattern, slicenum);
+        snprintf (this->InternalFileName, strlen(this->FilePattern) + 10, this->FilePattern, slicenum);
         }
       }
     else
@@ -195,7 +195,7 @@ void vtkImageReader4::ComputeInternalFileName(int slice)
 
 
 //----------------------------------------------------------------------------
-// This function sets the name of the file. 
+// This function sets the name of the file.
 void vtkImageReader4::SetFileName(const char *name)
 {
   if ( this->FileName && name && (!strcmp(this->FileName,name)))
@@ -238,7 +238,7 @@ void vtkImageReader4::SetFileName(const char *name)
 }
 
 //----------------------------------------------------------------------------
-// This function sets an array containing file names 
+// This function sets an array containing file names
 void vtkImageReader4::SetFileNames(vtkStringArray *filenames)
 {
   if (filenames == this->FileNames)
@@ -533,7 +533,7 @@ int vtkImageReader4::RequestInformation (
 {
   // call for backwards compatibility
   this->ExecuteInformation();
-  
+
   // get the info objects
   vtkInformation* outInfo = outputVector->GetInformationObject(0);
 
@@ -592,7 +592,7 @@ void vtkImageReader4::ComputeDataIncrements()
     }
 
   fileDataLength *= this->NumberOfScalarComponents;
-  
+
   // compute the fileDataLength (in units of bytes)
   for (idx = 0; idx < 3; ++idx)
     {
@@ -627,9 +627,9 @@ int vtkImageReader4::OpenFile()
   if ( !stat( this->InternalFileName, &fs) )
     {
 #ifdef _WIN32
-    this->File = new ifstream(this->InternalFileName, ios::in | ios::binary);
+    this->File = new vtksys::ifstream(this->InternalFileName, ios::in | ios::binary);
 #else
-    this->File = new ifstream(this->InternalFileName, ios::in);
+    this->File = new vtksys::ifstream(this->InternalFileName, ios::in);
 #endif
     }
   if (! this->File || this->File->fail())
@@ -748,16 +748,16 @@ void vtkImageReader4Update(vtkImageReader4 *self, vtkImageData *data, OT *outPtr
   int outExtent[6];
   unsigned long count = 0;
   unsigned long target;
-  
+
   // Get the requested extents and increments
   data->GetExtent(outExtent);
   data->GetIncrements(outIncr);
   nComponents = data->GetNumberOfScalarComponents();
-  
+
   // length of a row, num pixels read at a time
-  int pixelRead = outExtent[1] - outExtent[0] + 1; 
-  streamRead = (long)(pixelRead*nComponents*sizeof(OT));  
-  
+  int pixelRead = outExtent[1] - outExtent[0] + 1;
+  streamRead = (long)(pixelRead*nComponents*sizeof(OT));
+
   // create a buffer to hold a row of the data
   target = (unsigned long)((outExtent[5]-outExtent[4]+1)*
                            (outExtent[3]-outExtent[2]+1)/50.0);
@@ -784,7 +784,7 @@ void vtkImageReader4Update(vtkImageReader4 *self, vtkImageData *data, OT *outPtr
         }
       }
     outPtr1 = outPtr2;
-    for (idx1 = outExtent[2]; 
+    for (idx1 = outExtent[2];
          !self->AbortExecute && idx1 <= outExtent[3]; ++idx1)
       {
       if (!(count%target))
@@ -792,7 +792,7 @@ void vtkImageReader4Update(vtkImageReader4 *self, vtkImageData *data, OT *outPtr
         self->UpdateProgress(count/(50.0*target));
         }
       count++;
-      
+
       // seek to the correct row
       self->SeekFile(outExtent[0],idx1,idx2);
       // read the row.
@@ -837,23 +837,24 @@ void vtkImageReader4::FinalizeDigest()
 
     // write digest value
     for (i = 0; i < md_len; i++) {
-      sprintf(p, "%02x", md_value[i]);
+      snprintf(p, 32+1, "%02x", md_value[i]);
       p++; p++;
     }
 #endif
 }
 
+#if VTK_MAJOR_VERSION == 5
+
 //----------------------------------------------------------------------------
 // This function reads a data from a file.  The datas extent/axes
 // are assumed to be the same as the file extent/order.
-void vtkImageReader4::ExecuteDataWithInformation(vtkDataObject *output,
-                                                 vtkInformation *outInfo)
+void vtkImageReader4::ExecuteData(vtkDataObject *output)
 {
-  vtkImageData *data = this->AllocateOutputData(output, outInfo);
+  vtkImageData *data = this->AllocateOutputData(output);
 
   void *ptr;
   int *ext;
-  
+
   if (!this->FileName && !this->FilePattern)
     {
     vtkErrorMacro("Either a valid FileName or FilePattern must be specified.");
@@ -864,7 +865,7 @@ void vtkImageReader4::ExecuteDataWithInformation(vtkDataObject *output,
 
   data->GetPointData()->GetScalars()->SetName("ImageFile");
 
-  vtkDebugMacro("Reading extent: " << ext[0] << ", " << ext[1] << ", " 
+  vtkDebugMacro("Reading extent: " << ext[0] << ", " << ext[1] << ", "
         << ext[2] << ", " << ext[3] << ", " << ext[4] << ", " << ext[5]);
 
   this->ComputeDataIncrements();
@@ -890,6 +891,60 @@ void vtkImageReader4::ExecuteDataWithInformation(vtkDataObject *output,
 
 }
 
+#else
+
+//----------------------------------------------------------------------------
+// This function reads a data from a file.  The datas extent/axes
+// are assumed to be the same as the file extent/order.
+void vtkImageReader4::ExecuteDataWithInformation(vtkDataObject *output,
+                                                 vtkInformation *outInfo)
+{
+  #if (VTK_MAJOR_VERSION > 5)
+  vtkImageData *data = this->AllocateOutputData(output, outInfo);
+  #else
+  vtkImageData *data = this->AllocateOutputData(output);
+  #endif
+
+  void *ptr;
+  int *ext;
+
+  if (!this->FileName && !this->FilePattern)
+    {
+    vtkErrorMacro("Either a valid FileName or FilePattern must be specified.");
+    return;
+    }
+
+  ext = data->GetExtent();
+
+  data->GetPointData()->GetScalars()->SetName("ImageFile");
+
+  vtkDebugMacro("Reading extent: " << ext[0] << ", " << ext[1] << ", "
+        << ext[2] << ", " << ext[3] << ", " << ext[4] << ", " << ext[5]);
+
+  this->ComputeDataIncrements();
+
+  // Call the correct templated function for the output
+  ptr = data->GetScalarPointer();
+  switch (this->GetDataScalarType())
+    {
+    #ifdef __REQUIRE_CHECKSUMS_
+    vtkTemplateMacro(vtkImageReader4Update(this, data, (VTK_TT *)(ptr), &mdctx));
+    #else
+    vtkTemplateMacro(vtkImageReader4Update(this, data, (VTK_TT *)(ptr)));
+    #endif
+    default:
+      vtkErrorMacro(<< "UpdateFromFile: Unknown data type");
+    }
+  if (this->File)
+    {
+    this->File->close();
+    delete this->File;
+    this->File = NULL;
+    }
+
+}
+
+#endif
 
 //----------------------------------------------------------------------------
 // Set the data type of pixels in the file.
@@ -905,6 +960,10 @@ void vtkImageReader4::SetDataScalarType(int type)
   this->Modified();
   this->DataScalarType = type;
   // Set the default output scalar type
-  vtkImageData::SetScalarType(this->DataScalarType,
+  #if (VTK_MAJOR_VERSION > 5)
+  this->GetOutput()->SetScalarType(this->DataScalarType,
                               this->GetOutputInformation(0));
+  #else
+  this->GetOutput()->SetScalarType(this->DataScalarType);
+  #endif
 }

@@ -10,6 +10,7 @@
 #include "vtkStreamingDemandDrivenPipeline.h"
 #include "vtkImageData.h"
 
+#include <vtksys/FStream.hxx>
 #include <vtksys/SystemTools.hxx>
 
 vtkStandardNewMacro(vtkVFFWriter);
@@ -88,19 +89,21 @@ void vtkVFFWriter::PrintSelf(ostream& os, vtkIndent indent)
 
   // print header values
   std::map<vtkStdString, vtkStdString>::iterator curr;
+
   curr = this->header.header.begin();
-  os << indent << "Header Keywords:\n";  
-  for (vtkstd::map<vtkStdString, vtkStdString>::iterator i = this->header.header.begin();
+  os << indent << "Header Keywords:\n";
+  for (std::map<vtkStdString, vtkStdString>::iterator i = this->header.header.begin();
        i != this->header.header.end(); ++i)
     os << indent << indent << i->first << ": " << i->second << "\n";
 }
+
 
 //----------------------------------------------------------------------------
 // Breaks region into pieces with correct dimensionality.
 void vtkVFFWriter::RecursiveWrite(int axis,
                                     vtkImageData *cache,
                                     vtkInformation* inInfo,
-                                    ofstream *file)
+                                    ostream *file)
 {
   vtkImageData    *data;
   int             fileOpenedHere = 0;
@@ -135,9 +138,9 @@ void vtkVFFWriter::RecursiveWrite(int axis,
       }
     // Open the file
 #ifdef _WIN32
-    file = new ofstream(this->InternalFileName, ios::out | ios::binary);
+    file = new vtksys::ofstream(this->InternalFileName, ios::out | ios::binary);
 #else
-    file = new ofstream(this->InternalFileName, ios::out);
+    file = new vtksys::ofstream(this->InternalFileName, ios::out);
 #endif
     fileOpenedHere = 1;
     if (file->fail())
@@ -155,7 +158,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     file->flush();
     if (file->fail())
       {
-      file->close();
+      static_cast<vtksys::ofstream *>(file)->close();
       delete file;
       this->SetErrorCode(vtkErrorCode::OutOfDiskSpaceError);
       return;
@@ -216,7 +219,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     *file << hexdigest;
     delete [] hexdigest;
 #endif
-    file->close();
+	static_cast<vtksys::ofstream *>(file)->close();
     delete file;
     }
   return;
@@ -229,7 +232,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
                                     vtkImageData *cache,
                                     vtkImageData *data,
                                     vtkInformation* inInfo,
-                                    ofstream *file)
+                                    ostream *file)
 {
   int idx, min, max;
 
@@ -243,7 +246,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     file->flush();
     if (file->fail())
       {
-      file->close();
+	  static_cast<vtksys::ofstream *>(file)->close();
       delete file;
       this->SetErrorCode(vtkErrorCode::OutOfDiskSpaceError);
       }
@@ -280,9 +283,9 @@ void vtkVFFWriter::RecursiveWrite(int axis,
       }
     // Open the file
 #ifdef _WIN32
-    file = new ofstream(this->InternalFileName, ios::out | ios::binary);
+    file = new vtksys::ofstream(this->InternalFileName, ios::out | ios::binary);
 #else
-    file = new ofstream(this->InternalFileName, ios::out);
+    file = new vtksys::ofstream(this->InternalFileName, ios::out);
 #endif
     if (file->fail())
       {
@@ -298,7 +301,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     file->flush();
     if (file->fail())
       {
-      file->close();
+	  static_cast<vtksys::ofstream *>(file)->close();
       delete file;
       this->SetErrorCode(vtkErrorCode::OutOfDiskSpaceError);
       return;
@@ -307,7 +310,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     file->flush();
     if (file->fail())
       {
-      file->close();
+	  static_cast<vtksys::ofstream *>(file)->close();
       delete file;
       this->SetErrorCode(vtkErrorCode::OutOfDiskSpaceError);
       return;
@@ -342,7 +345,7 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     delete [] hexdigest;
 
 #endif
-    file->close();
+	static_cast<vtksys::ofstream *>(file)->close();
     delete file;
     return;
     }
@@ -360,7 +363,16 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     for(idx = max; idx >= min; idx--)
       {
       cache->SetAxisUpdateExtent(axis, idx, idx, updateExtent, axisUpdateExtent);
+
+#if VTK_MAJOR_VERSION > 7 || (VTK_MAJOR_VERSION == 7 && VTK_MINOR_VERSION >= 1)
+	  inInfo->Set(
+		  vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT(),
+		  axisUpdateExtent,
+		  6);
+#else
       vtkStreamingDemandDrivenPipeline::SetUpdateExtent(inInfo, axisUpdateExtent);
+#endif
+
       if (this->ErrorCode != vtkErrorCode::OutOfDiskSpaceError)
         {
         this->RecursiveWrite(axis - 1, cache, data, inInfo, file);
@@ -376,7 +388,15 @@ void vtkVFFWriter::RecursiveWrite(int axis,
     for(idx = min; idx <= max; idx++)
       {
       cache->SetAxisUpdateExtent(axis, idx, idx, updateExtent, axisUpdateExtent);
+
+#if VTK_MAJOR_VERSION > 7 || (VTK_MAJOR_VERSION == 7 && VTK_MINOR_VERSION >= 1)
+	  inInfo->Set(
+		  vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT(),
+		  axisUpdateExtent,
+		  6);
+#else
       vtkStreamingDemandDrivenPipeline::SetUpdateExtent(inInfo, axisUpdateExtent);
+#endif
       if (this->ErrorCode != vtkErrorCode::OutOfDiskSpaceError)
         {
         this->RecursiveWrite(axis - 1, cache, data, inInfo, file);
@@ -390,7 +410,16 @@ void vtkVFFWriter::RecursiveWrite(int axis,
 
   // restore original extent
   cache->SetAxisUpdateExtent(axis, min, max, updateExtent, axisUpdateExtent);
+
+#if VTK_MAJOR_VERSION > 7 || (VTK_MAJOR_VERSION == 7 && VTK_MINOR_VERSION >= 1)
+  inInfo->Set(
+	  vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT(),
+	  axisUpdateExtent,
+	  6);
+#else
   vtkStreamingDemandDrivenPipeline::SetUpdateExtent(inInfo, axisUpdateExtent);
+#endif
+
 }
 
 
@@ -402,21 +431,26 @@ unsigned long vtkImageWriterGetSize(T*)
 }
 
 //----------------------------------------------------------------------------
-void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt[6])
+void vtkVFFWriter::WriteFileHeader(ostream *file, vtkImageData *cache, int wExt[6])
 {
   int width, height, depth, dimensionality = 0, rawsize;
   double *spacing, *origin;
   double o2;
 
   // we need to know something about the update extent
+#if VTK_MAJOR_VERSION > 5
   vtkInformation* inInfo = this->GetInputInformation(0, 0);
   int *ext = vtkStreamingDemandDrivenPipeline::GetUpdateExtent(inInfo);
+#else
+  vtkInformation* inInfo = this->GetInput()->GetInformation(0, 0);
+  int *ext = vtkStreamingDemandDrivenPipeline::GetUpdateExtent(inInfo);
+#endif
 
   // Find the length of the rows to write.
   width = (wExt[1] - wExt[0] + 1);
   height = (wExt[3] - wExt[2] + 1);
   depth = (wExt[5] - wExt[4] + 1);
-  
+
   // work out effective dimensionality
   if (width > 1)
     dimensionality++;
@@ -424,36 +458,37 @@ void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt
     dimensionality++;
   if (depth > 1)
     dimensionality++;
- 
+
   // rawsize
   rawsize = width * height * depth * cache->GetScalarSize() * cache->GetNumberOfScalarComponents();
-  
+
   // Get image spacing & origin
   spacing = cache->GetSpacing();
   origin = cache->GetOrigin();
- 
+
   // adjust origin, as needed
   o2 = origin[2];
   o2 += (spacing[2] * (ext[2] - (wExt[4] - wExt[3])));
-  
-  // spit out the VFF header
+
+  // spit out the VFF header - only drop dimension value if it's the trailing dimension:
+  //    that is, (1,10,10) -> (1,10,10) but (10,10,1) -> (10,10)
   *file << "ncaa\n";
   *file << "type=raster;\n";
   *file << "format=slice;\n";
   *file << "bands=" << cache->GetNumberOfScalarComponents() << ";\n";
-  *file << "rank=" << dimensionality << ";\n"; 
+  *file << "rank=" << dimensionality << ";\n";
   *file << "bits=" << cache->GetScalarSize()*8 << ";\n";
   *file << "size=" << width << " " << height;
-  if (dimensionality > 2)
+  if (depth > 1)
     *file << " " << depth;
   *file << ";\n";
   *file << "rawsize=" << rawsize << ";\n";
   *file << "origin=" << (origin[0]/spacing[0]) << " " << (origin[1]/spacing[1]);
-  if (dimensionality > 2)
+  if (depth > 1)
     *file << " " << (o2/spacing[2]);
   *file << ";\n";
   *file << "spacing=" << spacing[0] << " " << spacing[1];
-  if (dimensionality > 2)
+  if (depth > 1)
     *file << " " << spacing[2];
   *file << ";\n";
 
@@ -461,7 +496,7 @@ void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt
   // optionally add/modify an image md5sum value
 #ifdef _REQUIRE_CHECKSUMS_
 
-  vtkstd::string checksum_key, checksum_value;
+  std::string checksum_key, checksum_value;
 
   // check for image_type keyword - set a sensible default if missing
   if (strlen(this->GetKeyword("image_type")) == 0)
@@ -487,9 +522,9 @@ void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt
 #endif
 
   // print additional header keywords
-  vtkstd::map<vtkStdString, vtkStdString>::iterator curr;
+  std::map<vtkStdString, vtkStdString>::iterator curr;
   curr = this->header.header.begin();
-  for (vtkstd::map<vtkStdString, vtkStdString>::iterator i = this->header.header.begin();
+  for (std::map<vtkStdString, vtkStdString>::iterator i = this->header.header.begin();
        i != this->header.header.end(); ++i) {
 
 #ifdef _REQUIRE_CHECKSUMS_
@@ -503,7 +538,7 @@ void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt
 
     // ignore hidden keywords
     std::string s = i->first;
-	if (s.find("hidden") != 0) 
+	if (s.find("hidden") != 0)
 	    *file << i->first << "=" << i->second << ";\n";
   }
 
@@ -513,7 +548,7 @@ void vtkVFFWriter::WriteFileHeader(ofstream *file, vtkImageData *cache, int wExt
 //----------------------------------------------------------------------------
 // Writes a region in a file.  Subclasses can override this method
 // to produce a header. This method only handles 3d data (plus components).
-void vtkVFFWriter::WriteFile(ofstream *file, vtkImageData *data,
+void vtkVFFWriter::WriteFile(ostream *file, vtkImageData *data,
                                int extent[6], int wExtent[6])
 {
   int idxY, idxZ;
@@ -538,7 +573,7 @@ void vtkVFFWriter::WriteFile(ofstream *file, vtkImageData *data,
   vtkByteSwap::Swap2LE(&test_s);
   if (test_s == 10)
     little = 1;
-  
+
   // take into consideration the scalar type
   switch (data->GetScalarType())
     {
@@ -554,7 +589,7 @@ void vtkVFFWriter::WriteFile(ofstream *file, vtkImageData *data,
 
   // allocate space for a temporary buffer
   char *buffer = new char[rowLength];
-  
+
   area = (float) ((extent[5] - extent[4] + 1)*
                   (extent[3] - extent[2] + 1)*
                   (extent[1] - extent[0] + 1)) /
@@ -575,16 +610,16 @@ void vtkVFFWriter::WriteFile(ofstream *file, vtkImageData *data,
     yend = extent[3]+1;
     yinc = 1;
     }
- 
+
   int lower = extent[4];
   int upper = extent[5];
-  
+
   for (idxZ = lower; idxZ <= upper; ++idxZ)
     {
     //this->GetInput()->UpdateInformation();
     //this->GetInput()->SetUpdateExtent(extent[0], extent[1], extent[2], extent[3], idxZ, idxZ);
     //this->GetInput()->Update();
-	    
+
     for (idxY = ystart; idxY != yend; idxY = idxY + yinc)
       {
       if (!(count%target))
@@ -619,8 +654,8 @@ void vtkVFFWriter::WriteFile(ofstream *file, vtkImageData *data,
 //----------------------------------------------------------------------------
 const char * vtkVFFWriter::GetKeyword(const char *keyword)
 {
-  vtkstd::string s(keyword);
-  static vtkstd::string t;
+  std::string s(keyword);
+  static std::string t;
   t = this->header.header[s];
   return t.c_str();
 }
@@ -628,8 +663,8 @@ const char * vtkVFFWriter::GetKeyword(const char *keyword)
 //----------------------------------------------------------------------------
 void vtkVFFWriter::SetKeyword(const char *keyword, const char *value)
 {
-  vtkstd::string s(keyword);
-  vtkstd::string t(value);
+  std::string s(keyword);
+  std::string t(value);
   static const char * bad_keywords[] = {"size", "origin", "aspect", "format", "type",
 	  		"bands", "bits", "spacing", "rank", "rawsize"};
   int i;
@@ -639,6 +674,6 @@ void vtkVFFWriter::SetKeyword(const char *keyword, const char *value)
     if (s == bad_keywords[i])
       return;
   }
-  
+
   this->header.header[s] = t;
 }
