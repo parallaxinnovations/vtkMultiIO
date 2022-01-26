@@ -5,8 +5,8 @@ Prerequisites:
 --------------
 
   In order to install vtkMultiIO on your system, first make certain that
-you have the proper prerequisites.  vtkMultiIO requires python 2.3 or higher, the
-python Numeric package and VTK 4.4 with python wrappers.  In addition, for
+you have the proper prerequisites.  vtkMultiIO requires python 3.9 or higher, the
+python Numeric package and VTK 9.0.1 with python wrappers.  In addition, for
 full functionality, the Python imaging libraries and Scientific
 libraries must be installed.  A list of web-sites for these products is
 listed below:
@@ -20,7 +20,7 @@ listed below:
 Configuration:
 --------------
 
-  vtkMultiIO makes use of Python's built-in distutils package.  In order 
+  vtkMultiIO makes use of Python's setuptools package.  In order
 to make/install the vtkMultiIO package, un-pack the source distribution,
 change directories to the main vtkMultiIO directory.  Edit the first few
 lines of the installer script 'setup.py' to suit your build environment.

@@ -2,7 +2,7 @@
 #
 # Copyright (c) 2000-2002 Enhanced Vision Systems
 # Copyright (c) 2002-2008 GE Healthcare
-# Copyright (c) 2011-2015 Parallax Innovations Inc.
+# Copyright (c) 2011-2022 Parallax Innovations Inc.
 #
 # Use, modification and redistribution of the software, in source or
 # binary forms, are permitted provided that the following terms and
@@ -82,7 +82,7 @@ class build_ext(_build_ext):
             shutil.copy(src, dest)
 
 desc = """
-Here's a set of python classes for Kitware's VTK software, to hide the
+Python classes for Kitware's VTK software, to hide the
 details of getting both 2D and 3D image data, and geometry data into and
 out of your code.  The classes wrap a number of different file format
 handlers into a single set of 'super' classes. The classes use a
