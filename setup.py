@@ -92,7 +92,7 @@ SetFileName() method.
 
 
 __init__py = """
-PACKAGE_VERSION = "2.5.0"
+PACKAGE_VERSION = "2.6.0"
 PACKAGE_SHA1 = "NA"
 """
 #print >> open(os.path.join(os.path.dirname(sys.argv[
