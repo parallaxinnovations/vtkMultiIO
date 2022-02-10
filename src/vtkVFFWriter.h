@@ -22,7 +22,7 @@ public:
 //#if (VTK_MAJOR_VERSION < 7)
   vtkTypeMacro(vtkVFFWriter,vtkImageWriter);
 //#endif
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
   const char *GetKeyword(const char *key);
   void SetKeyword(const char *key, const char *value);
   void SetTitle(const char *value) { this->SetKeyword("title", value); }
@@ -30,8 +30,8 @@ public:
   virtual void RecursiveWrite(int dim, vtkImageData *region, ofstream *file);
   virtual void RecursiveWrite(int axis, vtkImageData *cache, vtkImageData *data, ofstream *file);
 #else
-  virtual void RecursiveWrite(int axis, vtkImageData *cache, vtkInformation* inInfo, ostream *file);
-  virtual void RecursiveWrite(int axis, vtkImageData *cache, vtkImageData *data, vtkInformation* inInfo, ostream *file);
+  virtual void RecursiveWrite(int axis, vtkImageData *cache, vtkInformation* inInfo, ostream *file) override;
+  virtual void RecursiveWrite(int axis, vtkImageData *cache, vtkImageData *data, vtkInformation* inInfo, ostream *file) override;
 #endif
 
 protected:
@@ -44,8 +44,8 @@ protected:
   virtual void WriteFileHeader(ofstream *, vtkImageData *);
 #else
   virtual void WriteFile(ostream *file, vtkImageData *data,
-                         int extent[6], int wExtent[6]);
-  virtual void WriteFileHeader(ostream *, vtkImageData *, int [6]);
+                         int extent[6], int wExtent[6]) override;
+  virtual void WriteFileHeader(ostream *, vtkImageData *, int [6]) override;
 #endif
 
 private:

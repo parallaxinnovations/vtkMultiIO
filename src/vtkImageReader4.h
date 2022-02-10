@@ -45,7 +45,7 @@ public:
   static vtkImageReader4 *New();
   vtkTypeMacro(vtkImageReader4,vtkImageAlgorithm);
 
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Description:
   // Specify file name for the image file. If the data is stored in
@@ -256,7 +256,7 @@ protected:
 
   virtual int RequestInformation(vtkInformation* request,
                                  vtkInformationVector** inputVector,
-                                 vtkInformationVector* outputVector);
+                                 vtkInformationVector* outputVector) override;
   virtual void ExecuteInformation();
 
 #if VTK_MAJOR_VERSION == 5
