@@ -43,9 +43,13 @@
 Loads as many different readers as is possible.
 """
 from __future__ import absolute_import
+from pkg_resources import working_set, Environment
+from PI.lite.vtkImageImportFromArray import vtkImageImportFromArray
+import xml.etree.ElementTree
 
 from builtins import range
 import os
+import sys
 import logging
 import vtk
 from . import vtkImageReaderBase
@@ -57,13 +61,14 @@ logger = logging.getLogger(__name__)
 
 
 # These next packages are needed to build standalone codebase
-import xml.etree.ElementTree
-from PI.lite.vtkImageImportFromArray import vtkImageImportFromArray
 
-from pkg_resources import iter_entry_points, working_set, Environment
+if sys.version_info < (3, 10):
+    from importlib_metadata import entry_points
+else:
+    from importlib.metadata import entry_points
+
 
 _plugin_cache = None
-
 
 
 def LoadImageReaders(reader=None, directories=['.'], cache=True):
@@ -81,7 +86,7 @@ def LoadImageReaders(reader=None, directories=['.'], cache=True):
     #   -- the goal here is to reduce binary distribution and to speed load time
     #      by avoiding loading modules/packages we don't actually use
 
-    for module in iter_entry_points(group='PI.vtk.ImageReader', name=None):
+    for module in entry_points(group='PI.vtk.ImageReader'):
 
         try:
 
@@ -112,7 +117,7 @@ def LoadGeometryReaders(reader=None, directories=['.'], cache=True):
 
     PluginHelper.SetupPlugins(directories)
 
-    for module in iter_entry_points(group='PI.vtk.PolyDataReader', name=None):
+    for module in entry_points(group='PI.vtk.PolyDataReader'):
 
         # Load module
         _class = module.load()
@@ -136,13 +141,17 @@ def GetImageReaderByClassName(classname, directories=['.']):
     if _plugin_cache:
         distributions, errors = _plugin_cache
     else:
+
+        # almost correct replacement
+        # [m.name for m in importlib_metadata.Distribution.discover(path=glob.glob('*.egg'))]
+
         distributions, errors = _plugin_cache = working_set.find_plugins(
             Environment(directories))
 
     for dist in distributions:
         working_set.add(dist)
 
-    for module in iter_entry_points(group='PI.vtk.ImageReader'):
+    for module in entry_points(group='PI.vtk.ImageReader'):
 
         if module.module_name.endswith(classname):
             # Load module

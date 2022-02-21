@@ -22,7 +22,7 @@ class VTK_EXPORT vtkImageReader3 : public vtkImageAlgorithm
 public:
   static vtkImageReader3 *New();
   vtkTypeMacro(vtkImageReader3,vtkImageAlgorithm);
-  void PrintSelf(ostream& os, vtkIndent indent);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
 
   // Description:
   // Specify file name for the image file. If the data is stored in
