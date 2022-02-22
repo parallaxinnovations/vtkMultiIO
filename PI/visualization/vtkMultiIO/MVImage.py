@@ -685,7 +685,7 @@ class MVImage(object):
                 pos[2] += spacing[2] * i  # TODO: does direction cosines enter in here?
                 slice_dict[i].ImagePositionPatient = pos
                 slice_dict[i].SliceLocation = pos[2]
-                slice_dict[i].InstancetNumber = i
+                slice_dict[i].InstanceNumber = i
 
             # remove SOPInstanceUID from top-level dicom ds
             if 'SOPInstanceUID' in ds:
